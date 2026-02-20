@@ -6,7 +6,6 @@ const https = require("https");
 const app = express();
 app.use(express.json({ limit: "256kb" }));
 
-// Если позже поставите nginx / cloudflare, это позволит Express корректно читать req.ip из X-Forwarded-For
 app.set("trust proxy", true);
 
 // ===== НАСТРОЙКИ =====
@@ -15,13 +14,9 @@ const KEITARO_TOKEN = process.env.KEITARO_TOKEN || "";
 const ALLOW_STREAM_ID = Number(process.env.ALLOW_STREAM_ID || 0);
 const API_KEY = process.env.API_KEY || "";
 
-// Опционально: если у Keitaro самоподписанный сертификат, можно временно отключить проверку TLS.
-// НЕ рекомендуется для продакшна.
 const INSECURE_SSL = String(process.env.INSECURE_SSL || "").toLowerCase() === "1";
 const httpsAgent = INSECURE_SSL ? new https.Agent({ rejectUnauthorized: false }) : undefined;
 
-// Опционально: если вам прям надо разрешить подставной IP из клиента (для тестов) — включите.
-// По умолчанию IP берётся из реального запроса.
 const ALLOW_CLIENT_IP = String(process.env.ALLOW_CLIENT_IP || "").toLowerCase() === "1";
 
 // ===== Авторизация =====
@@ -43,7 +38,6 @@ function pickHeader(headersArr, name) {
   return h.substring(h.indexOf(":") + 1).trim();
 }
 
-// Реальный IP (а не из тела запроса)
 function getRealIp(req) {
   const xff = req.headers["x-forwarded-for"];
   let ip =
@@ -62,6 +56,12 @@ function getLanguage(req) {
   return al.split(",")[0].split(";")[0].trim();
 }
 
+function looksLikeUrl(s) {
+  if (!s || typeof s !== "string") return false;
+  const t = s.trim();
+  return t.startsWith("http://") || t.startsWith("https://");
+}
+
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
@@ -72,26 +72,21 @@ app.post("/keitaro_gate", auth, async (req, res) => {
       throw new Error("Server not configured");
     }
 
-    // UA / language лучше брать из заголовков (так же, как IP)
-    // но оставляем обратную совместимость: если клиент прислал в body — используем как fallback
     const ua =
       (req.headers["user-agent"] && String(req.headers["user-agent"])) ||
       (req.body?.ua || "");
 
     const language = getLanguage(req) || (req.body?.language || "");
 
-    // IP: по умолчанию только реальный IP запроса; body.ip игнорируется
     const ip = ALLOW_CLIENT_IP ? (req.body?.ip || getRealIp(req)) : getRealIp(req);
 
-    // ваши sub-параметры (как было)
     const sub_id = req.body?.sub_id || "";
     const sub_id_2 = req.body?.sub2 || "";
 
-    // Запрос к Click API
     const clickApiUrl =
       `${KEITARO_TRACKER}/click_api/v3` +
       `?token=${encodeURIComponent(KEITARO_TOKEN)}` +
-      `&info=1&log=0&&force_redirect_offer=1` +
+      `&info=1&log=0&force_redirect_offer=1` +
       (ip ? `&ip=${encodeURIComponent(ip)}` : "") +
       (ua ? `&user_agent=${encodeURIComponent(ua)}` : "") +
       (language ? `&language=${encodeURIComponent(language)}` : "") +
@@ -108,15 +103,23 @@ app.post("/keitaro_gate", auth, async (req, res) => {
     const info = data.info || {};
     const streamId = info.stream_id || 0;
 
-    // 1) Пробуем взять Location из JSON Click API
+    // 1) Location из headers[]
     const location = pickHeader(data.headers, "Location");
 
-    // 2) Иначе возвращаем фоллбек по token
+    // 2) Некоторые сборки/настройки могут вернуть URL прямо в полях ответа
+    const directUrl =
+      (looksLikeUrl(data.redirect) && data.redirect) ||
+      (looksLikeUrl(data.url) && data.url) ||
+      (looksLikeUrl(data.location) && data.location) ||
+      (looksLikeUrl(data.body) && data.body) ||
+      "";
+
+    // 3) Фоллбек по token (оставляем как было)
     const fallbackUrl = info.token
       ? `${KEITARO_TRACKER}/?_lp=1&_token=${encodeURIComponent(info.token)}`
       : "";
 
-    const finalUrl = location || fallbackUrl;
+    const finalUrl = location || directUrl || fallbackUrl;
 
     const allow = Number(streamId) === Number(ALLOW_STREAM_ID);
 
