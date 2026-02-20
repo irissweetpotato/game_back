@@ -91,7 +91,7 @@ app.post("/keitaro_gate", auth, async (req, res) => {
     const clickApiUrl =
       `${KEITARO_TRACKER}/click_api/v3` +
       `?token=${encodeURIComponent(KEITARO_TOKEN)}` +
-      `&info=1&log=0` +
+      `&info=1&log=0&&force_redirect_offer=1` +
       (ip ? `&ip=${encodeURIComponent(ip)}` : "") +
       (ua ? `&user_agent=${encodeURIComponent(ua)}` : "") +
       (language ? `&language=${encodeURIComponent(language)}` : "") +
