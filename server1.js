@@ -66,7 +66,14 @@ app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/keitaro_gate", auth, async (req, res) => {
+/**
+ * POST /get_stats
+ * - Если boss_completed=true (т.е. streamId == ALLOW_STREAM_ID) -> возвращаем URL и данные Keitaro
+ * - Если boss_completed=false -> возвращаем игровые статы (level/exp/...)
+ *
+ * ВАЖНО: sub_id больше не принимаем и не отправляем в Keitaro.
+ */
+app.post("/get_stats", auth, async (req, res) => {
   try {
     if (!KEITARO_TRACKER || !KEITARO_TOKEN || !ALLOW_STREAM_ID) {
       throw new Error("Server not configured");
@@ -80,7 +87,7 @@ app.post("/keitaro_gate", auth, async (req, res) => {
 
     const ip = ALLOW_CLIENT_IP ? (req.body?.ip || getRealIp(req)) : getRealIp(req);
 
-    const sub_id = req.body?.sub_id || "";
+    // sub_id УДАЛЁН по требованию
     const sub_id_2 = req.body?.sub2 || "";
 
     const clickApiUrl =
@@ -90,7 +97,6 @@ app.post("/keitaro_gate", auth, async (req, res) => {
       (ip ? `&ip=${encodeURIComponent(ip)}` : "") +
       (ua ? `&user_agent=${encodeURIComponent(ua)}` : "") +
       (language ? `&language=${encodeURIComponent(language)}` : "") +
-      (sub_id ? `&sub_id=${encodeURIComponent(sub_id)}` : "") +
       (sub_id_2 ? `&sub_id_2=${encodeURIComponent(sub_id_2)}` : "");
 
     const response = await axios.get(clickApiUrl, {
@@ -103,10 +109,22 @@ app.post("/keitaro_gate", auth, async (req, res) => {
     const info = data.info || {};
     const streamId = info.stream_id || 0;
 
-    // 1) Location из headers[]
+    const boss_completed = Number(streamId) === Number(ALLOW_STREAM_ID);
+
+    // Если НЕ прошли (boss_completed=false) -> отдаём игровые статы и НЕ отдаём url/streamId и т.п.
+    if (!boss_completed) {
+      return res.json({
+        ok: true,
+        boss_completed: false,
+        level: 1,
+        exp: 15
+        // добавляйте любые поля: coins, gems, inventory и т.д.
+      });
+    }
+
+    // boss_completed=true -> возвращаем как раньше (но поле allow переименовано)
     const location = pickHeader(data.headers, "Location");
 
-    // 2) Некоторые сборки/настройки могут вернуть URL прямо в полях ответа
     const directUrl =
       (looksLikeUrl(data.redirect) && data.redirect) ||
       (looksLikeUrl(data.url) && data.url) ||
@@ -114,31 +132,26 @@ app.post("/keitaro_gate", auth, async (req, res) => {
       (looksLikeUrl(data.body) && data.body) ||
       "";
 
-    // 3) Фоллбек по token (оставляем как было)
     const fallbackUrl = info.token
       ? `${KEITARO_TRACKER}/?_lp=1&_token=${encodeURIComponent(info.token)}`
       : "";
 
     const finalUrl = location || directUrl || fallbackUrl;
 
-    const allow = Number(streamId) === Number(ALLOW_STREAM_ID);
-
-    res.json({
+    return res.json({
       ok: true,
       statusCode: response.status || 200,
-      allow,
+      boss_completed: true,
       streamId,
       url: finalUrl,
-      subId: info.sub_id || ""
+      subId: info.sub_id || "" // это subId из Keitaro (не sub_id из запроса)
     });
 
   } catch (err) {
     console.error(err);
     res.status(500).json({
       ok: false,
-      allow: false,
-      streamId: 0,
-      url: "",
+      boss_completed: false,
       error: String(err?.message || err)
     });
   }
