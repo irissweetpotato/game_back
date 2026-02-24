@@ -1,193 +1,271 @@
-﻿<!-- ===== Header + Popups Snippet ===== -->
-<style>
-  :root{
-    --bg:#0b1020;
-    --panel:#121a33;
-    --border:#24325f;
-    --text:#f2f5ff;
-    --muted:#aab4e6;
-    --accent:#6aa6ff;
-    --radius:14px;
-  }
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>stats_games.com — Leaderboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- ===== HEADER ===== -->
+  <header class="site-header">
+    <div class="site-title">stats_games.com</div>
+    <div class="header-actions">
+      <button class="header-btn" type="button" data-open="privacyModal">Privacy Policy</button>
+      <button class="header-btn" type="button" data-open="aboutModal">About Service</button>
+    </div>
+  </header>
 
-  body{
-    margin:0;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    background:var(--bg);
-    color:var(--text);
-  }
+  <main class="wrap">
+    <section class="panel" aria-label="Leaderboard">
+      <div class="panel-top">
+        <div class="panel-left">
+          <div class="panel-h">Leaderboard</div>
+          <div class="panel-sub" id="metaLine">Loading…</div>
+        </div>
 
-  /* ===== HEADER ===== */
-  .site-header{
-    width:100%;
-    padding:20px 32px;
-    background:linear-gradient(180deg, #111a33, #0e162b);
-    border-bottom:1px solid var(--border);
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-  }
+        <div class="controls">
+          <button class="btn" id="firstBtn" type="button">« First</button>
+          <button class="btn" id="prevBtn" type="button">‹ Prev</button>
+          <div class="page-indicator" id="pageInfo">Page 1 / 1</div>
+          <button class="btn" id="nextBtn" type="button">Next ›</button>
+          <button class="btn" id="lastBtn" type="button">Last »</button>
+        </div>
+      </div>
 
-  .site-title{
-    font-size:28px;
-    font-weight:800;
-    letter-spacing:2px;
-    text-transform:uppercase;
-  }
+      <div class="table-wrap" role="region" aria-label="Leaderboard table" tabindex="0">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-rank">Rank</th>
+              <th class="col-user">Player</th>
+              <th class="col-score">Score</th>
+              <th class="col-date">Updated</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="4" class="state-cell">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
 
-  .header-actions{
-    display:flex;
-    gap:12px;
-  }
+      <div class="panel-bottom">
+        <div class="hint">API: <span class="mono">/leaderboard</span></div>
+        <div class="hint" id="errorLine" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
 
-  .header-btn{
-    padding:10px 16px;
-    border-radius:10px;
-    border:1px solid var(--border);
-    background:rgba(255,255,255,0.04);
-    color:var(--text);
-    cursor:pointer;
-    font-size:13px;
-    transition:all .15s ease;
-  }
+  <!-- ===== MODALS ===== -->
 
-  .header-btn:hover{
-    background:rgba(255,255,255,0.08);
-  }
-
-  /* ===== MODAL ===== */
-  .modal-overlay{
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,0.65);
-    display:none;
-    align-items:center;
-    justify-content:center;
-    z-index:1000;
-  }
-
-  .modal{
-    width:90%;
-    max-width:640px;
-    background:var(--panel);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    padding:24px;
-    box-shadow:0 20px 60px rgba(0,0,0,0.6);
-    position:relative;
-  }
-
-  .modal h2{
-    margin-top:0;
-    font-size:20px;
-  }
-
-  .modal p{
-    font-size:14px;
-    line-height:1.6;
-    color:var(--muted);
-  }
-
-  .modal .contact{
-    margin-top:18px;
-    padding-top:12px;
-    border-top:1px solid var(--border);
-    font-size:14px;
-  }
-
-  .close-btn{
-    position:absolute;
-    top:12px;
-    right:14px;
-    background:none;
-    border:none;
-    color:var(--muted);
-    font-size:18px;
-    cursor:pointer;
-  }
-
-  .close-btn:hover{
-    color:var(--text);
-  }
-</style>
-
-<header class="site-header">
-  <div class="site-title">stats_games.com</div>
-  <div class="header-actions">
-    <button class="header-btn" onclick="openModal('privacyModal')">
-      Privacy Policy
-    </button>
-    <button class="header-btn" onclick="openModal('aboutModal')">
-      About Service
-    </button>
-  </div>
-</header>
-
-<!-- Privacy Policy Modal -->
-<div class="modal-overlay" id="privacyModal">
-  <div class="modal">
-    <button class="close-btn" onclick="closeModal('privacyModal')">&times;</button>
-    <h2>Privacy Policy</h2>
-    <p>
-      stats_games.com provides statistics storage solutions for game developers.
-      We collect only the technical and gameplay data necessary for leaderboard
-      functionality and performance analytics.
-    </p>
-    <p>
-      We do not sell, rent, or share collected data with third parties.
-      All stored data is processed exclusively for the purpose of providing
-      statistics services to our clients.
-    </p>
-    <p>
-      Reasonable security measures are implemented to protect stored information
-      against unauthorized access, alteration, or disclosure.
-    </p>
-    <div class="contact">
-      For privacy-related inquiries, please contact:
-      <br><strong>contact@stats-games.com</strong>
+  <div class="modal-overlay" id="privacyModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
+      <button class="close-btn" type="button" data-close="privacyModal" aria-label="Close">&times;</button>
+      <h2 id="privacyTitle">Privacy Policy</h2>
+      <p>
+        stats_games.com provides statistics storage solutions for game developers.
+        We store only the data required to deliver leaderboard and analytics features.
+      </p>
+      <p>
+        We do not sell, rent, or share your data with third parties.
+        Data is processed exclusively to provide services to our clients.
+      </p>
+      <p>
+        We apply reasonable technical and organizational measures to protect information
+        from unauthorized access, alteration, or disclosure.
+      </p>
+      <div class="contact">
+        For privacy inquiries, contact:
+        <br><strong>contact@stats-games.com</strong>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- About Service Modal -->
-<div class="modal-overlay" id="aboutModal">
-  <div class="modal">
-    <button class="close-btn" onclick="closeModal('aboutModal')">&times;</button>
-    <h2>About stats_games.com</h2>
-    <p>
-      stats_games.com is a platform offering developers a convenient,
-      fast, and cost-effective solution for storing and managing
-      player statistics.
-    </p>
-    <p>
-      The service is designed to simplify leaderboard implementation,
-      reduce infrastructure costs, and provide reliable data storage.
-      No data is transferred or shared with third parties.
-    </p>
-    <div class="contact">
-      If you require our services or have business inquiries,
-      please reach out via email:
-      <br><strong>contact@stats-games.com</strong>
+  <div class="modal-overlay" id="aboutModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+      <button class="close-btn" type="button" data-close="aboutModal" aria-label="Close">&times;</button>
+      <h2 id="aboutTitle">About stats_games.com</h2>
+      <p>
+        stats_games.com is a platform offering developers a convenient, fast, and cost-effective
+        way to store and manage player statistics.
+      </p>
+      <p>
+        The service helps you implement leaderboards quickly, reduce infrastructure costs, and keep
+        your data under your control. We do not transfer data to third parties.
+      </p>
+      <div class="contact">
+        For business inquiries and integration requests:
+        <br><strong>contact@stats-games.com</strong>
+      </div>
     </div>
   </div>
-</div>
 
-<script>
-  function openModal(id){
-    document.getElementById(id).style.display = "flex";
-  }
-
-  function closeModal(id){
-    document.getElementById(id).style.display = "none";
-  }
-
-  // Close on outside click
-  window.addEventListener("click", function(e){
-    document.querySelectorAll(".modal-overlay").forEach(modal => {
-      if(e.target === modal){
-        modal.style.display = "none";
+  <script>
+    // ===== Modals =====
+    function openModal(id){
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = "flex";
+      el.setAttribute("aria-hidden", "false");
+    }
+    function closeModal(id){
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = "none";
+      el.setAttribute("aria-hidden", "true");
+    }
+    document.addEventListener("click", (e) => {
+      const openId = e.target?.getAttribute?.("data-open");
+      const closeId = e.target?.getAttribute?.("data-close");
+      if (openId) openModal(openId);
+      if (closeId) closeModal(closeId);
+      if (e.target && e.target.classList && e.target.classList.contains("modal-overlay")) {
+        e.target.style.display = "none";
+        e.target.setAttribute("aria-hidden", "true");
       }
     });
-  });
-</script>
-<!-- ===== End Snippet ===== -->
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      document.querySelectorAll(".modal-overlay").forEach(m => {
+        if (getComputedStyle(m).display !== "none") {
+          m.style.display = "none";
+          m.setAttribute("aria-hidden", "true");
+        }
+      });
+    });
+
+    // ===== Leaderboard =====
+    const API_URL = "/leaderboard";
+    const PAGE_SIZE = 10;
+
+    const tbody = document.getElementById("tbody");
+    const pageInfo = document.getElementById("pageInfo");
+    const metaLine = document.getElementById("metaLine");
+    const errorLine = document.getElementById("errorLine");
+
+    const firstBtn = document.getElementById("firstBtn");
+    const prevBtn  = document.getElementById("prevBtn");
+    const nextBtn  = document.getElementById("nextBtn");
+    const lastBtn  = document.getElementById("lastBtn");
+
+    let users = [];
+    let page = 1;
+    let totalPages = 1;
+
+    function safeText(v){
+      return String(v ?? "").replace(/[&<>"']/g, (c) => ({
+        "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+      }[c]));
+    }
+    function formatScore(n){
+      const s = String(n ?? 0);
+      return s.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    }
+    function rankClass(rank){
+      if (rank === 1) return "rank-1";
+      if (rank === 2) return "rank-2";
+      if (rank === 3) return "rank-3";
+      return "";
+    }
+    function crownForRank(rank){
+      return rank === 1 ? `<span class="crown" aria-hidden="true">👑</span>` : "";
+    }
+
+    function setButtons(){
+      firstBtn.disabled = page === 1;
+      prevBtn.disabled  = page === 1;
+      nextBtn.disabled  = page === totalPages;
+      lastBtn.disabled  = page === totalPages;
+      pageInfo.textContent = `Page ${page} / ${totalPages}`;
+    }
+
+    function render(){
+      totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+      page = Math.min(page, totalPages);
+
+      const start = (page - 1) * PAGE_SIZE;
+      const slice = users.slice(start, start + PAGE_SIZE);
+
+      metaLine.textContent = `Total: ${users.length} players • Showing ${PAGE_SIZE} per page`;
+      errorLine.textContent = "";
+
+      if (!slice.length){
+        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">No data.</td></tr>`;
+        setButtons();
+        return;
+      }
+
+      tbody.innerHTML = slice.map(u => `
+        <tr>
+          <td class="col-rank">
+            <div class="rank ${rankClass(u.rank)}">
+              <div class="rank-badge" title="Rank #${u.rank}">
+                ${crownForRank(u.rank)}
+                <span class="rank-num">${u.rank}</span>
+              </div>
+            </div>
+          </td>
+
+          <td class="col-user">
+            <div class="user">
+              <div class="avatar" aria-hidden="true"></div>
+              <div>
+                <div class="uname">
+                  ${safeText(u.name)}
+                  ${u.tag ? `<span class="utag">#${safeText(u.tag).replace(/^#/, "")}</span>` : ""}
+                </div>
+                <div class="uid mono">GUID: ${safeText(u.guid ?? "")}</div>
+              </div>
+            </div>
+          </td>
+
+          <td class="col-score">
+            <span class="score mono">${formatScore(u.score)}</span>
+          </td>
+
+          <td class="col-date mono">${safeText(u.updatedAt)}</td>
+        </tr>
+      `).join("");
+
+      setButtons();
+    }
+
+    async function loadLeaderboard(){
+      try{
+        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Loading…</td></tr>`;
+        metaLine.textContent = "Loading…";
+
+        const res = await fetch(`${API_URL}?limit=100`, {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+          cache: "no-store"
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const raw = await res.json();
+        users = Array.isArray(raw) ? raw : [];
+        // если rank не пришёл — добавим
+        if (users.length && users[0].rank == null) {
+          users.sort((a,b) => Number(b.score||0) - Number(a.score||0));
+          users = users.map((x,i) => ({...x, rank:i+1}));
+        }
+
+        render();
+      } catch (e){
+        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Failed to load leaderboard.</td></tr>`;
+        metaLine.textContent = "Leaderboard is unavailable.";
+        errorLine.textContent = `Error: ${String(e?.message || e)}`;
+        setButtons();
+      }
+    }
+
+    firstBtn.addEventListener("click", () => { page = 1; render(); });
+    prevBtn.addEventListener("click",  () => { page = Math.max(1, page - 1); render(); });
+    nextBtn.addEventListener("click",  () => { page = Math.min(totalPages, page + 1); render(); });
+    lastBtn.addEventListener("click",  () => { page = totalPages; render(); });
+
+    loadLeaderboard();
+  </script>
+</body>
+</html>
