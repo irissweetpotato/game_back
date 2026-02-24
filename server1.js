@@ -170,7 +170,7 @@ function stripTrackingParams(url) {
     return u.toString();
   } catch { return url; }
 }
-const leaderboardRouter = require("./routes/leaderboard.routes");
+
 app.use("/", leaderboardRouter); // или app.use("/api", leaderboardRouter)
 
 const PORT = 3000;
