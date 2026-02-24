@@ -136,7 +136,7 @@ app.post("/get_stats", auth, async (req, res) => {
       ? `${KEITARO_TRACKER}/?_lp=1&_token=${encodeURIComponent(info.token)}`
       : "";
 
-    const finalUrl = location || directUrl || fallbackUrl;
+    const finalUrl = stripTrackingParams(location || directUrl || fallbackUrl);
 
     return res.json({
       ok: true,
@@ -156,7 +156,14 @@ app.post("/get_stats", auth, async (req, res) => {
     });
   }
 });
-
+function stripTrackingParams(url) {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("_subid");
+    u.searchParams.delete("_token");
+    return u.toString();
+  } catch { return url; }
+}
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);
