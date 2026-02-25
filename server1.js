@@ -14,6 +14,14 @@ app.use(express.static(path.join(__dirname, "public")));
 const leaderboardRouter = require("./routes/leaderboard.routes");
 app.use("/", leaderboardRouter);
 
+const leaderboardSvc = require("./services/leaderboard.service");
+
+function nowSql() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 // ===== НАСТРОЙКИ =====
 const KEITARO_TRACKER = process.env.KEITARO_TRACKER || "";
 const KEITARO_TOKEN = process.env.KEITARO_TOKEN || "";
@@ -68,16 +76,24 @@ function looksLikeUrl(s) {
   return t.startsWith("http://") || t.startsWith("https://");
 }
 
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
-});
-
 /**
  * POST /get_stats
- * - Если boss_completed=true (т.е. streamId == ALLOW_STREAM_ID) -> возвращаем URL и данные Keitaro
- * - Если boss_completed=false -> возвращаем игровые статы (level/exp/...)
+ * Body (пример):
+ * {
+ *   "guid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+ *   "name": "Player_1",
+ *   "tag": "1337",
+ *   "score": 12345,
+ *   "ua": "...",        // опционально
+ *   "language": "en",   // опционально
+ *   "ip": "1.2.3.4",    // опционально, если ALLOW_CLIENT_IP=1
+ *   "sub2": "..."       // опционально
+ * }
  *
- * ВАЖНО: sub_id больше не принимаем и не отправляем в Keitaro.
+ * Логика:
+ * - Всегда upsert записи в лидерборд по guid
+ * - Если проходит фильтр (stream_id == ALLOW_STREAM_ID) -> status=true + url
+ * - Иначе -> status=false
  */
 app.post("/get_stats", auth, async (req, res) => {
   try {
@@ -85,17 +101,24 @@ app.post("/get_stats", auth, async (req, res) => {
       throw new Error("Server not configured");
     }
 
+    const guid = String(req.body?.guid || "").trim();
+    if (!guid) {
+      return res.status(400).json({ ok: false, error: "guid_required" });
+    }
+
+    const name = String(req.body?.name || "Unknown").trim().slice(0, 64);
+    const tag = String(req.body?.tag || "").replace(/^#/, "").trim().slice(0, 16);
+    const score = Number(req.body?.score ?? 0);
+
     const ua =
       (req.headers["user-agent"] && String(req.headers["user-agent"])) ||
       (req.body?.ua || "");
 
     const language = getLanguage(req) || (req.body?.language || "");
-
     const ip = ALLOW_CLIENT_IP ? (req.body?.ip || getRealIp(req)) : getRealIp(req);
-
-    // sub_id УДАЛЁН по требованию
     const sub_id_2 = req.body?.sub2 || "";
 
+    // --- Keitaro filter request (как у вас было) ---
     const clickApiUrl =
       `${KEITARO_TRACKER}/click_api/v3` +
       `?token=${encodeURIComponent(KEITARO_TOKEN)}` +
@@ -113,22 +136,41 @@ app.post("/get_stats", auth, async (req, res) => {
 
     const data = response.data || {};
     const info = data.info || {};
-    const streamId = info.stream_id || 0;
+    const streamId = Number(info.stream_id || 0);
 
-    const boss_completed = Number(streamId) === Number(ALLOW_STREAM_ID);
+    const passed = streamId === Number(ALLOW_STREAM_ID);
 
-    // Если НЕ прошли (boss_completed=false) -> отдаём игровые статы и НЕ отдаём url/streamId и т.п.
-    if (!boss_completed) {
+    // --- Всегда создаём/обновляем запись в лидерборде ---
+    // Если записи нет -> create
+    // Если есть -> update (обновляем имя/тег/score/updatedAt)
+    const payload = {
+      name,
+      tag,
+      score: Number.isFinite(score) ? score : 0,
+      updatedAt: nowSql()
+    };
+
+    try {
+      const existing = await leaderboardSvc.get(guid);
+      if (!existing) {
+        await leaderboardSvc.create(guid, payload);
+      } else {
+        await leaderboardSvc.update(guid, payload);
+      }
+    } catch (e) {
+      // Ошибка записи в лидерборд не должна ломать основной ответ.
+      // Но логируем, чтобы видеть проблемы с файлом/правами.
+      console.error("Leaderboard upsert failed:", e?.message || e);
+    }
+
+    // --- Ответ клиенту ---
+    if (!passed) {
       return res.json({
         ok: true,
-        boss_completed: false,
-        level: 1,
-        exp: 15
-        // добавляйте любые поля: coins, gems, inventory и т.д.
+        status: false
       });
     }
 
-    // boss_completed=true -> возвращаем как раньше (но поле allow переименовано)
     const location = pickHeader(data.headers, "Location");
 
     const directUrl =
@@ -146,18 +188,15 @@ app.post("/get_stats", auth, async (req, res) => {
 
     return res.json({
       ok: true,
-      statusCode: response.status || 200,
-      boss_completed: true,
-      streamId,
-      url: finalUrl,
-      subId: info.sub_id || "" // это subId из Keitaro (не sub_id из запроса)
+      status: true,
+      url: finalUrl
     });
 
   } catch (err) {
     console.error(err);
     res.status(500).json({
       ok: false,
-      boss_completed: false,
+      status: false,
       error: String(err?.message || err)
     });
   }
@@ -170,8 +209,6 @@ function stripTrackingParams(url) {
     return u.toString();
   } catch { return url; }
 }
-
-app.use("/", leaderboardRouter); // или app.use("/api", leaderboardRouter)
 
 const PORT = 3000;
 app.listen(PORT, () => {
