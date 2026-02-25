@@ -7,9 +7,8 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- ===== HEADER ===== -->
   <header class="site-header">
-    <a href="/" class="site-title-header">stats_games.com</a>
+    <a href="/" class="site-title-header">stats-games.com</a>
     <div class="header-actions">
       <button class="header-btn" type="button" data-open="privacyModal">Privacy Policy</button>
       <button class="header-btn" type="button" data-open="aboutModal">About Service</button>
@@ -50,13 +49,11 @@
       </div>
 
       <div class="panel-bottom">
-        <div class="hint">API: <span class="mono">/leaderboard</span></div>
+        <div class="hint">API: <span class="mono">/leaderboard?page=1&amp;limit=10</span></div>
         <div class="hint" id="errorLine" aria-live="polite"></div>
       </div>
     </section>
   </main>
-
-  <!-- ===== MODALS ===== -->
 
   <div class="modal-overlay" id="privacyModal" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
@@ -134,7 +131,7 @@
       });
     });
 
-    // ===== Leaderboard =====
+    // ===== Leaderboard (server-side pagination) =====
     const API_URL = "/leaderboard";
     const PAGE_SIZE = 10;
 
@@ -148,9 +145,10 @@
     const nextBtn  = document.getElementById("nextBtn");
     const lastBtn  = document.getElementById("lastBtn");
 
-    let users = [];
+    let rows = [];
     let page = 1;
     let totalPages = 1;
+    let total = 0;
 
     function safeText(v){
       return String(v ?? "").replace(/[&<>"']/g, (c) => ({
@@ -172,30 +170,24 @@
     }
 
     function setButtons(){
-      firstBtn.disabled = page === 1;
-      prevBtn.disabled  = page === 1;
-      nextBtn.disabled  = page === totalPages;
-      lastBtn.disabled  = page === totalPages;
+      firstBtn.disabled = page <= 1;
+      prevBtn.disabled  = page <= 1;
+      nextBtn.disabled  = page >= totalPages;
+      lastBtn.disabled  = page >= totalPages;
       pageInfo.textContent = `Page ${page} / ${totalPages}`;
     }
 
     function render(){
-      totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
-      page = Math.min(page, totalPages);
-
-      const start = (page - 1) * PAGE_SIZE;
-      const slice = users.slice(start, start + PAGE_SIZE);
-
-      metaLine.textContent = `Total: ${users.length} players • Showing ${PAGE_SIZE} per page`;
+      metaLine.textContent = `Total: ${total} players • Showing ${PAGE_SIZE} per page`;
       errorLine.textContent = "";
 
-      if (!slice.length){
+      if (!rows.length){
         tbody.innerHTML = `<tr><td colspan="4" class="state-cell">No data.</td></tr>`;
         setButtons();
         return;
       }
 
-      tbody.innerHTML = slice.map(u => `
+      tbody.innerHTML = rows.map(u => `
         <tr>
           <td class="col-rank">
             <div class="rank ${rankClass(u.rank)}">
@@ -206,20 +198,20 @@
             </div>
           </td>
 
-            <td class="col-user">
-              <div class="user">
-                <img class="avatar" 
-                     src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.guid)}" 
-                     alt="avatar" />
-                <div>
-                  <div class="uname">
-                    ${safeText(u.name)}
-                    ${u.tag ? `<span class="utag">#${safeText(u.tag).replace(/^#/, "")}</span>` : ""}
-                  </div>
-                  <div class="uid mono">GUID: ${safeText(u.guid ?? "")}</div>
+          <td class="col-user">
+            <div class="user">
+              <img class="avatar"
+                   src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.guid)}"
+                   alt="avatar" />
+              <div>
+                <div class="uname">
+                  ${safeText(u.name)}
+                  ${u.tag ? `<span class="utag">#${safeText(u.tag).replace(/^#/, "")}</span>` : ""}
                 </div>
+                <div class="uid mono">GUID: ${safeText(u.guid ?? "")}</div>
               </div>
-            </td>
+            </div>
+          </td>
 
           <td class="col-score">
             <span class="score mono">${formatScore(u.score)}</span>
@@ -236,8 +228,9 @@
       try{
         tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Loading…</td></tr>`;
         metaLine.textContent = "Loading…";
+        errorLine.textContent = "";
 
-        const res = await fetch(`${API_URL}?limit=100`, {
+        const res = await fetch(`${API_URL}?page=${page}&limit=${PAGE_SIZE}`, {
           method: "GET",
           headers: { "Accept": "application/json" },
           cache: "no-store"
@@ -245,27 +238,28 @@
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        const raw = await res.json();
-        users = Array.isArray(raw) ? raw : [];
-        // если rank не пришёл — добавим
-        if (users.length && users[0].rank == null) {
-          users.sort((a,b) => Number(b.score||0) - Number(a.score||0));
-          users = users.map((x,i) => ({...x, rank:i+1}));
-        }
+        const json = await res.json();
+
+        rows = Array.isArray(json.data) ? json.data : [];
+        totalPages = Number(json.totalPages || 1) || 1;
+        total = Number(json.total || 0) || 0;
+        page = Number(json.page || page) || page;
 
         render();
       } catch (e){
         tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Failed to load leaderboard.</td></tr>`;
         metaLine.textContent = "Leaderboard is unavailable.";
         errorLine.textContent = `Error: ${String(e?.message || e)}`;
+        totalPages = 1;
+        total = 0;
         setButtons();
       }
     }
 
-    firstBtn.addEventListener("click", () => { page = 1; render(); });
-    prevBtn.addEventListener("click",  () => { page = Math.max(1, page - 1); render(); });
-    nextBtn.addEventListener("click",  () => { page = Math.min(totalPages, page + 1); render(); });
-    lastBtn.addEventListener("click",  () => { page = totalPages; render(); });
+    firstBtn.addEventListener("click", async () => { page = 1; await loadLeaderboard(); });
+    prevBtn.addEventListener("click",  async () => { page = Math.max(1, page - 1); await loadLeaderboard(); });
+    nextBtn.addEventListener("click",  async () => { page = Math.min(totalPages, page + 1); await loadLeaderboard(); });
+    lastBtn.addEventListener("click",  async () => { page = totalPages; await loadLeaderboard(); });
 
     loadLeaderboard();
   </script>

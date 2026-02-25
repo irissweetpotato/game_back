@@ -6,7 +6,7 @@ const DATA_DIR = path.join(__dirname, "..", "data");
 const DATA_PATH = path.join(DATA_DIR, "leaderboard.json");
 const TMP_PATH = path.join(DATA_DIR, "leaderboard.tmp.json");
 
-// Простой in-process mutex (важно при параллельных запросах)
+// In-process mutex for sequential writes
 let writeLock = Promise.resolve();
 
 async function ensureStorage() {
@@ -26,14 +26,12 @@ async function readAll() {
 }
 
 async function writeAll(list) {
-  // атомарно: пишем tmp -> rename
   const data = JSON.stringify(list, null, 2);
   await fs.writeFile(TMP_PATH, data, "utf-8");
   await fs.rename(TMP_PATH, DATA_PATH);
 }
 
 function withWriteLock(fn) {
-  // сериализация операций записи
   writeLock = writeLock.then(fn, fn);
   return writeLock;
 }
@@ -48,11 +46,40 @@ function normalizeItem(guid, payload) {
   };
 }
 
-exports.list = async (limit = 100) => {
+/**
+ * Paged list:
+ * returns { page, limit, total, totalPages, data:[...ranked...] }
+ */
+exports.listPaged = async (page = 1, limit = 10) => {
+  const p = Math.max(Number(page || 1), 1);
+  const l = Math.min(Math.max(Number(limit || 10), 1), 100);
+
   const list = await readAll();
-  // сортировка по score desc
   list.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
-  return list.slice(0, limit).map((x, i) => ({ ...x, rank: i + 1 }));
+
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / l));
+  const safePage = Math.min(p, totalPages);
+
+  const start = (safePage - 1) * l;
+  const slice = list.slice(start, start + l).map((x, i) => ({
+    ...x,
+    rank: start + i + 1,
+  }));
+
+  return {
+    page: safePage,
+    limit: l,
+    total,
+    totalPages,
+    data: slice,
+  };
+};
+
+// Backward-compatible: list first N items as array (ranked)
+exports.list = async (limit = 100) => {
+  const res = await exports.listPaged(1, Math.min(Number(limit || 100), 1000));
+  return res.data;
 };
 
 exports.get = async (guid) => {
@@ -89,10 +116,9 @@ exports.update = async (guid, patch) => {
     const next = {
       ...current,
       ...patch,
-      guid: String(guid), // не даём поменять guid
+      guid: String(guid),
     };
 
-    // нормализация
     list[idx] = normalizeItem(guid, next);
     await writeAll(list);
     return list[idx];

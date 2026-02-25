@@ -2,7 +2,6 @@
 const svc = require("../services/leaderboard.service");
 
 function isGuidLike(s) {
-  // строгий UUID можно усилить, но этого достаточно дл€ практики
   return typeof s === "string" && s.length >= 8 && s.length <= 128;
 }
 
@@ -13,7 +12,6 @@ function nowSql() {
 }
 
 function sanitizePayload(body, allowPartial = true) {
-  // –азрешЄнные пол€
   const out = {};
   if (body == null || typeof body !== "object") return out;
 
@@ -21,7 +19,6 @@ function sanitizePayload(body, allowPartial = true) {
   if ("tag" in body) out.tag = String(body.tag ?? "").replace(/^#/, "").slice(0, 16);
   if ("score" in body) out.score = Number(body.score);
 
-  // ѕроста€ валидаци€
   if (!allowPartial) {
     if (!out.name) throw new Error("name is required");
     if (!Number.isFinite(out.score)) throw new Error("score is required and must be number");
@@ -29,20 +26,25 @@ function sanitizePayload(body, allowPartial = true) {
     if ("score" in out && !Number.isFinite(out.score)) throw new Error("score must be number");
   }
 
-  // updatedAt сервер выставл€ет сам, чтобы клиент не подмен€л врем€
   out.updatedAt = nowSql();
-
   return out;
 }
 
+// GET /leaderboard?page=1&limit=10
 exports.getLeaderboard = async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit || 100), 1000);
-    const list = await svc.list(limit);
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const limit = Math.min(Math.max(Number(req.query.limit || 10), 1), 100);
+
+    const result = await svc.listPaged(page, limit);
+
     res.set("Cache-Control", "no-store");
-    res.status(200).json(list);
+    res.status(200).json(result);
   } catch (e) {
-    res.status(500).json({ error: "LEADERBOARD_LIST_FAILED", message: String(e?.message || e) });
+    res.status(500).json({
+      error: "LEADERBOARD_LIST_FAILED",
+      message: String(e?.message || e),
+    });
   }
 };
 
@@ -57,7 +59,10 @@ exports.getEntry = async (req, res) => {
     res.set("Cache-Control", "no-store");
     res.status(200).json(item);
   } catch (e) {
-    res.status(500).json({ error: "LEADERBOARD_GET_FAILED", message: String(e?.message || e) });
+    res.status(500).json({
+      error: "LEADERBOARD_GET_FAILED",
+      message: String(e?.message || e),
+    });
   }
 };
 
@@ -66,7 +71,7 @@ exports.createEntry = async (req, res) => {
     const guid = req.params.guid;
     if (!isGuidLike(guid)) return res.status(400).json({ error: "BAD_GUID" });
 
-    const payload = sanitizePayload(req.body, /*allowPartial*/ false);
+    const payload = sanitizePayload(req.body, false);
     const created = await svc.create(guid, payload);
 
     res.status(201).json(created);
@@ -81,9 +86,8 @@ exports.updateEntry = async (req, res) => {
     const guid = req.params.guid;
     if (!isGuidLike(guid)) return res.status(400).json({ error: "BAD_GUID" });
 
-    const patch = sanitizePayload(req.body, /*allowPartial*/ true);
-    // ≈сли клиент прислал пустое тело Ч смысла нет
-    const keys = Object.keys(patch).filter(k => k !== "updatedAt");
+    const patch = sanitizePayload(req.body, true);
+    const keys = Object.keys(patch).filter((k) => k !== "updatedAt");
     if (keys.length === 0) return res.status(400).json({ error: "EMPTY_PATCH" });
 
     const updated = await svc.update(guid, patch);
