@@ -45,7 +45,18 @@ body{
   letter-spacing:2px;
   text-transform:uppercase;
 }
-
+.site-title-header{
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  font-size:28px;
+  font-weight:900;
+}
+.site-title-header:hover{
+  opacity: .85;
+}
 .header-actions{
   display:flex;
   gap:12px;

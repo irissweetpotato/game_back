@@ -3,61 +3,281 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>stats_games.com — Leaderboard</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <title>stats_games.com — Player Stats & Leaderboards for Developers</title>
+  <meta name="description" content="Fast, affordable player stats storage and leaderboards for game developers. Simple API, no third-party data sharing." />
+  <link rel="stylesheet" href="./landing.css" />
 </head>
 <body>
-  <!-- ===== HEADER ===== -->
-  <header class="site-header">
-    <div class="site-title">stats_games.com</div>
-    <div class="header-actions">
-      <button class="header-btn" type="button" data-open="privacyModal">Privacy Policy</button>
-      <button class="header-btn" type="button" data-open="aboutModal">About Service</button>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div class="brand-text">
+          <div class="brand-name">stats_games.com</div>
+          <div class="brand-sub">Developer-friendly player stats storage</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-link" href="#features">Features</a>
+        <a class="nav-link" href="#pricing">Pricing</a>
+        <a class="nav-link" href="#faq">FAQ</a>
+      </nav>
+
+      <div class="topbar-actions">
+        <button class="btn ghost" type="button" data-open="privacyModal">Privacy</button>
+        <button class="btn ghost" type="button" data-open="aboutModal">About</button>
+      </div>
+
+      <button class="burger" type="button" aria-label="Open menu" id="burgerBtn">☰</button>
+    </div>
+
+    <div class="mobile-nav" id="mobileNav" aria-hidden="true">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+      <button class="btn ghost full" type="button" data-open="privacyModal">Privacy</button>
+      <button class="btn ghost full" type="button" data-open="aboutModal">About</button>
     </div>
   </header>
 
-  <main class="wrap">
-    <section class="panel" aria-label="Leaderboard">
-      <div class="panel-top">
-        <div class="panel-left">
-          <div class="panel-h">Leaderboard</div>
-          <div class="panel-sub" id="metaLine">Loading…</div>
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-left">
+          <div class="badge">Production-ready • Simple REST • No third-party sharing</div>
+          <h1 class="h1">
+            Store player stats and leaderboards
+            <span class="grad">fast</span>, <span class="grad2">cheap</span>, and <span class="grad">reliably</span>.
+          </h1>
+          <p class="lead">
+            stats_games.com is a lightweight backend for developers who want a quick, clean way
+            to store scores, ranks and basic player stats without building infrastructure from scratch.
+          </p>
+
+          <div class="cta">
+            <a class="btn primary" href="#pricing">Get Started</a>
+          </div>
+
+          <div class="trust">
+            <div class="trust-item">
+              <div class="trust-kpi">99.9%</div>
+              <div class="trust-label">Service uptime target</div>
+            </div>
+            <div class="trust-item">
+              <div class="trust-kpi">&lt; 1 min</div>
+              <div class="trust-label">Typical integration time</div>
+            </div>
+            <div class="trust-item">
+              <div class="trust-kpi">0</div>
+              <div class="trust-label">Third-party data sharing</div>
+            </div>
+          </div>
         </div>
 
-        <div class="controls">
-          <button class="btn" id="firstBtn" type="button">« First</button>
-          <button class="btn" id="prevBtn" type="button">‹ Prev</button>
-          <div class="page-indicator" id="pageInfo">Page 1 / 1</div>
-          <button class="btn" id="nextBtn" type="button">Next ›</button>
-          <button class="btn" id="lastBtn" type="button">Last »</button>
+        <div class="hero-right">
+          <div class="card preview">
+            <div class="preview-top">
+              <div class="dot red"></div>
+              <div class="dot yellow"></div>
+              <div class="dot green"></div>
+              <div class="preview-title">Leaderboard Preview</div>
+            </div>
+
+            <div class="mini">
+              <div class="mini-row head">
+                <div>Rank</div><div>Player</div><div>Score</div><div>Updated</div>
+              </div>
+              <div class="mini-row gold">
+                <div class="rank">
+                  <span class="crown">👑</span><span class="rb">1</span>
+                </div>
+                <div class="player">Player_1</div>
+                <div class="score">100 000</div>
+                <div class="time">now</div>
+              </div>
+              <div class="mini-row silver">
+                <div class="rank"><span class="rb">2</span></div>
+                <div class="player">Player_2</div>
+                <div class="score">99 269</div>
+                <div class="time">1h ago</div>
+              </div>
+              <div class="mini-row bronze">
+                <div class="rank"><span class="rb">3</span></div>
+                <div class="player">Player_3</div>
+                <div class="score">98 538</div>
+                <div class="time">2h ago</div>
+              </div>
+
+              <div class="mini-row">
+                <div class="rank"><span class="rb dim">4</span></div>
+                <div class="player dim">Player_4</div>
+                <div class="score dim">97 807</div>
+                <div class="time dim">3h ago</div>
+              </div>
+              <div class="mini-row">
+                <div class="rank"><span class="rb dim">5</span></div>
+                <div class="player dim">Player_5</div>
+                <div class="score dim">97 076</div>
+                <div class="time dim">4h ago</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card side">
+            <div class="side-h">Contact</div>
+            <div class="side-p">
+              For integration help or custom requirements:
+            </div>
+            <a class="side-mail" href="mailto:contact@stats-games.com">contact@stats-games.com</a>
+            <div class="side-note">
+              We provide quick onboarding and simple documentation for teams of any size.
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div class="table-wrap" role="region" aria-label="Leaderboard table" tabindex="0">
-        <table>
-          <thead>
-            <tr>
-              <th class="col-rank">Rank</th>
-              <th class="col-user">Player</th>
-              <th class="col-score">Score</th>
-              <th class="col-date">Updated</th>
-            </tr>
-          </thead>
-          <tbody id="tbody">
-            <tr><td colspan="4" class="state-cell">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="panel-bottom">
-        <div class="hint">API: <span class="mono">/leaderboard</span></div>
-        <div class="hint" id="errorLine" aria-live="polite"></div>
       </div>
     </section>
+
+    <!-- FEATURES -->
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head">
+          <h2>Features built for developers</h2>
+          <p>Minimal setup, predictable API, and clear data ownership rules.</p>
+        </div>
+
+        <div class="grid3">
+          <div class="fcard">
+            <div class="icon">⚡</div>
+            <div class="fh">Fast integration</div>
+            <div class="fp">REST endpoints for create/update/delete by GUID. Client-side pagination support.</div>
+          </div>
+          <div class="fcard">
+            <div class="icon">🛡️</div>
+            <div class="fh">No third-party sharing</div>
+            <div class="fp">We do not sell, rent, or share collected stats with third parties.</div>
+          </div>
+          <div class="fcard">
+            <div class="icon">📈</div>
+            <div class="fh">Leaderboard-ready</div>
+            <div class="fp">Sorted ranking, server-side pagination, and clean JSON output for UI.</div>
+          </div>
+          <div class="fcard">
+            <div class="icon">🔧</div>
+            <div class="fh">Configurable</div>
+            <div class="fp">Per-game separation and custom fields can be added for your project.</div>
+          </div>
+          <div class="fcard">
+            <div class="icon">🔒</div>
+            <div class="fh">Secure by default</div>
+            <div class="fp">HTTPS, minimal surface area, and predictable responses.</div>
+          </div>
+          <div class="fcard">
+            <div class="icon">🧾</div>
+            <div class="fh">Simple terms</div>
+            <div class="fp">Clear policy and a transparent, developer-friendly service model.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING -->
+    <section class="section" id="pricing">
+      <div class="container">
+        <div class="section-head">
+          <h2>Pricing</h2>
+          <p>Start small. Scale when you need it.</p>
+        </div>
+
+        <div class="grid3 pricing">
+          <div class="pcard">
+            <div class="pt">Starter</div>
+            <div class="pp">$0</div>
+            <div class="ps">For prototypes and tests</div>
+            <ul class="plist">
+              <li>Basic leaderboard endpoints</li>
+              <li>Up to 1 game</li>
+              <li>Community support</li>
+            </ul>
+            <a class="btn full" href="mailto:contact@stats-games.com?subject=Starter%20plan%20request">Request</a>
+          </div>
+
+          <div class="pcard hot">
+            <div class="tag">Most Popular</div>
+            <div class="pt">Indie</div>
+            <div class="pp">$19</div>
+            <div class="ps">For small live projects</div>
+            <ul class="plist">
+              <li>Multiple games</li>
+              <li>Higher limits</li>
+              <li>Email support</li>
+            </ul>
+            <a class="btn primary full" href="mailto:contact@stats-games.com?subject=Indie%20plan%20request">Request</a>
+          </div>
+
+          <div class="pcard">
+            <div class="pt">Studio</div>
+            <div class="pp">Custom</div>
+            <div class="ps">For high scale & SLA</div>
+            <ul class="plist">
+              <li>Custom requirements</li>
+              <li>Dedicated support</li>
+              <li>Security review</li>
+            </ul>
+            <a class="btn full" href="mailto:contact@stats-games.com?subject=Studio%20plan%20request">Contact</a>
+          </div>
+        </div>
+
+        <div class="note">
+          Prices are indicative. For a real quote, email:
+          <a href="mailto:contact@stats-games.com">contact@stats-games.com</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <div class="container">
+        <div class="section-head">
+          <h2>FAQ</h2>
+          <p>Common questions about data and usage.</p>
+        </div>
+
+        <div class="faq">
+          <details class="q">
+            <summary>Do you share player data with third parties?</summary>
+            <div class="a">No. We do not sell, rent, or share stored statistics with third parties.</div>
+          </details>
+          <details class="q">
+            <summary>Can I host multiple games?</summary>
+            <div class="a">Yes. A per-game separation model can be enabled so each game has its own leaderboard.</div>
+          </details>
+          <details class="q">
+            <summary>Is this suitable for production?</summary>
+            <div class="a">For serious scale, use server-side pagination and a database backend (SQLite/PostgreSQL). We can help with that migration.</div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <div class="container footer-inner">
+        <div class="foot-left">
+          <div class="foot-brand">stats_games.com</div>
+          <div class="foot-sub">Fast, affordable player stats storage for developers.</div>
+        </div>
+        <div class="foot-right">
+          <a href="#pricing">Pricing</a>
+          <a href="mailto:contact@stats-games.com">contact@stats-games.com</a>
+          <button class="linkbtn" type="button" data-open="privacyModal">Privacy</button>
+        </div>
+      </div>
+    </footer>
   </main>
 
-  <!-- ===== MODALS ===== -->
-
+  <!-- MODALS -->
   <div class="modal-overlay" id="privacyModal" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
       <button class="close-btn" type="button" data-close="privacyModal" aria-label="Close">&times;</button>
@@ -70,12 +290,8 @@
         We do not sell, rent, or share your data with third parties.
         Data is processed exclusively to provide services to our clients.
       </p>
-      <p>
-        We apply reasonable technical and organizational measures to protect information
-        from unauthorized access, alteration, or disclosure.
-      </p>
       <div class="contact">
-        For privacy inquiries, contact:
+        For privacy inquiries:
         <br><strong>contact@stats-games.com</strong>
       </div>
     </div>
@@ -86,188 +302,94 @@
       <button class="close-btn" type="button" data-close="aboutModal" aria-label="Close">&times;</button>
       <h2 id="aboutTitle">About stats_games.com</h2>
       <p>
-        stats_games.com is a platform offering developers a convenient, fast, and cost-effective
-        way to store and manage player statistics.
-      </p>
-      <p>
-        The service helps you implement leaderboards quickly, reduce infrastructure costs, and keep
-        your data under your control. We do not transfer data to third parties.
+        stats_games.com is a platform offering developers a convenient, fast, and cost-effective way to store and manage player statistics.
+        We do not transfer or share stored data with third parties.
       </p>
       <div class="contact">
-        For business inquiries and integration requests:
+        Business inquiries:
         <br><strong>contact@stats-games.com</strong>
       </div>
     </div>
   </div>
 
   <script>
-    // ===== Modals =====
-    function openModal(id){
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.style.display = "flex";
-      el.setAttribute("aria-hidden", "false");
-    }
-    function closeModal(id){
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.style.display = "none";
-      el.setAttribute("aria-hidden", "true");
-    }
-    document.addEventListener("click", (e) => {
-      const openId = e.target?.getAttribute?.("data-open");
-      const closeId = e.target?.getAttribute?.("data-close");
-      if (openId) openModal(openId);
-      if (closeId) closeModal(closeId);
-      if (e.target && e.target.classList && e.target.classList.contains("modal-overlay")) {
-        e.target.style.display = "none";
-        e.target.setAttribute("aria-hidden", "true");
+      // ===== Modals =====
+      function openModal(id){
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.display = "flex";
+        el.setAttribute("aria-hidden", "false");
       }
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      document.querySelectorAll(".modal-overlay").forEach(m => {
-        if (getComputedStyle(m).display !== "none") {
-          m.style.display = "none";
-          m.setAttribute("aria-hidden", "true");
+      function closeModal(id){
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.display = "none";
+        el.setAttribute("aria-hidden", "true");
+      }
+
+      document.addEventListener("click", (e) => {
+        const openId = e.target?.getAttribute?.("data-open");
+        const closeId = e.target?.getAttribute?.("data-close");
+
+        if (openId) openModal(openId);
+        if (closeId) closeModal(closeId);
+
+        if (e.target && e.target.classList && e.target.classList.contains("modal-overlay")) {
+          e.target.style.display = "none";
+          e.target.setAttribute("aria-hidden", "true");
         }
       });
-    });
 
-    // ===== Leaderboard =====
-    const API_URL = "/leaderboard";
-    const PAGE_SIZE = 10;
-
-    const tbody = document.getElementById("tbody");
-    const pageInfo = document.getElementById("pageInfo");
-    const metaLine = document.getElementById("metaLine");
-    const errorLine = document.getElementById("errorLine");
-
-    const firstBtn = document.getElementById("firstBtn");
-    const prevBtn  = document.getElementById("prevBtn");
-    const nextBtn  = document.getElementById("nextBtn");
-    const lastBtn  = document.getElementById("lastBtn");
-
-    let users = [];
-    let page = 1;
-    let totalPages = 1;
-
-    function safeText(v){
-      return String(v ?? "").replace(/[&<>"']/g, (c) => ({
-        "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
-      }[c]));
-    }
-    function formatScore(n){
-      const s = String(n ?? 0);
-      return s.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-    }
-    function rankClass(rank){
-      if (rank === 1) return "rank-1";
-      if (rank === 2) return "rank-2";
-      if (rank === 3) return "rank-3";
-      return "";
-    }
-    function crownForRank(rank){
-      return rank === 1 ? `<span class="crown" aria-hidden="true">👑</span>` : "";
-    }
-
-    function setButtons(){
-      firstBtn.disabled = page === 1;
-      prevBtn.disabled  = page === 1;
-      nextBtn.disabled  = page === totalPages;
-      lastBtn.disabled  = page === totalPages;
-      pageInfo.textContent = `Page ${page} / ${totalPages}`;
-    }
-
-    function render(){
-      totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
-      page = Math.min(page, totalPages);
-
-      const start = (page - 1) * PAGE_SIZE;
-      const slice = users.slice(start, start + PAGE_SIZE);
-
-      metaLine.textContent = `Total: ${users.length} players • Showing ${PAGE_SIZE} per page`;
-      errorLine.textContent = "";
-
-      if (!slice.length){
-        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">No data.</td></tr>`;
-        setButtons();
-        return;
-      }
-
-      tbody.innerHTML = slice.map(u => `
-        <tr>
-          <td class="col-rank">
-            <div class="rank ${rankClass(u.rank)}">
-              <div class="rank-badge" title="Rank #${u.rank}">
-                ${crownForRank(u.rank)}
-                <span class="rank-num">${u.rank}</span>
-              </div>
-            </div>
-          </td>
-
-            <td class="col-user">
-              <div class="user">
-                <img class="avatar" 
-                     src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.guid)}" 
-                     alt="avatar" />
-                <div>
-                  <div class="uname">
-                    ${safeText(u.name)}
-                    ${u.tag ? `<span class="utag">#${safeText(u.tag).replace(/^#/, "")}</span>` : ""}
-                  </div>
-                  <div class="uid mono">GUID: ${safeText(u.guid ?? "")}</div>
-                </div>
-              </div>
-            </td>
-
-          <td class="col-score">
-            <span class="score mono">${formatScore(u.score)}</span>
-          </td>
-
-          <td class="col-date mono">${safeText(u.updatedAt)}</td>
-        </tr>
-      `).join("");
-
-      setButtons();
-    }
-
-    async function loadLeaderboard(){
-      try{
-        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Loading…</td></tr>`;
-        metaLine.textContent = "Loading…";
-
-        const res = await fetch(`${API_URL}?limit=100`, {
-          method: "GET",
-          headers: { "Accept": "application/json" },
-          cache: "no-store"
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        document.querySelectorAll(".modal-overlay").forEach(m => {
+          if (getComputedStyle(m).display !== "none") {
+            m.style.display = "none";
+            m.setAttribute("aria-hidden", "true");
+          }
         });
+      });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // ===== Mobile menu =====
+      const burgerBtn = document.getElementById("burgerBtn");
+      const mobileNav = document.getElementById("mobileNav");
 
-        const raw = await res.json();
-        users = Array.isArray(raw) ? raw : [];
-        // если rank не пришёл — добавим
-        if (users.length && users[0].rank == null) {
-          users.sort((a,b) => Number(b.score||0) - Number(a.score||0));
-          users = users.map((x,i) => ({...x, rank:i+1}));
+      burgerBtn?.addEventListener("click", () => {
+        const open = mobileNav.classList.toggle("open");
+        mobileNav.setAttribute("aria-hidden", open ? "false" : "true");
+      });
+
+      // Close mobile menu on link click
+      mobileNav?.addEventListener("click", (e) => {
+        const a = e.target?.closest?.("a");
+        if (!a) return;
+        mobileNav.classList.remove("open");
+        mobileNav.setAttribute("aria-hidden", "true");
+      });
+
+      // ===== Reveal on scroll =====
+      // Добавляем reveal-класс набору крупных блоков.
+      const revealTargets = document.querySelectorAll(
+        ".hero-left, .hero-right, " +
+        "#features .section-head, #features .grid3, " +
+        "#pricing .section-head, #pricing .grid3, " +
+        "#docs .section-head, #docs .codecard, #docs .cta-row, " +
+        "#faq .section-head, #faq .faq, " +
+        ".footer"
+      );
+
+      revealTargets.forEach(el => el.classList.add("reveal"));
+
+      const io = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            io.unobserve(entry.target);
+          }
         }
+      }, { threshold: 0.12, rootMargin: "0px 0px -10% 0px" });
 
-        render();
-      } catch (e){
-        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Failed to load leaderboard.</td></tr>`;
-        metaLine.textContent = "Leaderboard is unavailable.";
-        errorLine.textContent = `Error: ${String(e?.message || e)}`;
-        setButtons();
-      }
-    }
-
-    firstBtn.addEventListener("click", () => { page = 1; render(); });
-    prevBtn.addEventListener("click",  () => { page = Math.max(1, page - 1); render(); });
-    nextBtn.addEventListener("click",  () => { page = Math.min(totalPages, page + 1); render(); });
-    lastBtn.addEventListener("click",  () => { page = totalPages; render(); });
-
-    loadLeaderboard();
-  </script>
+      revealTargets.forEach(el => io.observe(el));
+    </script>
 </body>
 </html>
