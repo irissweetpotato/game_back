@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.betsson.apostgameio",
+      "sha256_cert_fingerprints": [
+        "E3:69:AF:36:52:A3:34:0A:3D:57:9D:EB:37:F5:A2:2D:D1:76:B1:DD:5A:F3:31:3A:67:8F:D7:5D:42:DF:0C:7C"
+      ]
+    }
+  }
+]
