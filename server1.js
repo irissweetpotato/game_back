@@ -123,27 +123,6 @@ function stripTrackingParams(url) {
   }
 }
 
-/**
- * POST /get_stats
- * Body (пример):
- * {
- *   "guid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
- *   "name": "Player_1",
- *   "tag": "1337",
- *   "score": 12345,
- *   "ua": "...",        // опционально
- *   "language": "en",   // опционально
- *   "ip": "1.2.3.4",    // опционально, если ALLOW_CLIENT_IP=1
- *   "sub2": "..."       // опционально
- * }
- *
- * Логика:
- * - Всегда делаем запрос в Keitaro
- * - Если Keitaro вернул 404 -> status=false
- * - Если Keitaro не вернул 404, но не удалось получить валидный URL -> status=false
- * - Если Keitaro не вернул 404 и URL получен -> status=true + url
- * - При status=false сохраняем/обновляем запись в лидерборде
- */
 app.post("/get_stats", auth, async (req, res) => {
   try {
     if (!KEITARO_TRACKER || !KEITARO_TOKEN) {
@@ -185,54 +164,39 @@ app.post("/get_stats", auth, async (req, res) => {
 
     const statusCode = Number(response.status || 0);
     const data = response.data || {};
-    const info = data.info || {};
     const trackerBase = normalizeBaseUrl(KEITARO_TRACKER);
 
-    const location =
-      pickHeader(data.headers, "Location") ||
-      response.headers?.location ||
-      "";
+    // Если сам HTTP-ответ от Keitaro = 404, сразу считаем непроходом
+    if (statusCode === 404) {
+      await saveLeaderboardSafe(guid, name, tag, score);
+      return res.json({
+        ok: true,
+        isBot: false
+      });
+    }
 
-    const directUrlRaw =
+    const locationFromBody = pickHeader(data.headers, "Location");
+    const locationFromHeaders = response.headers?.location || "";
+
+    const bodyCandidate =
       data.redirect ||
       data.url ||
       data.location ||
-      data.body ||
       "";
 
-    const fallbackUrl = info.token
-      ? `${KEITARO_TRACKER}/?_lp=1&_token=${encodeURIComponent(info.token)}`
-      : "";
+    const resolvedLocation = resolveUrl(locationFromBody || locationFromHeaders, trackerBase);
+    const resolvedBodyUrl = resolveUrl(bodyCandidate, trackerBase);
 
-    const resolvedLocation = resolveUrl(location, trackerBase);
-    const resolvedDirectUrl = resolveUrl(directUrlRaw, trackerBase);
-    const resolvedFallbackUrl = resolveUrl(fallbackUrl, trackerBase);
-
+    // ВАЖНО:
+    // fallbackUrl полностью убран.
+    // Если Keitaro не дал нормальный redirect/location/url,
+    // значит считаем это непроходом.
     const finalUrl = stripTrackingParams(
-      resolvedLocation || resolvedDirectUrl || resolvedFallbackUrl || ""
+      resolvedLocation || resolvedBodyUrl || ""
     );
 
-    const passed = statusCode !== 404 && !!finalUrl;
-
-    if (!passed) {
-      const payload = {
-        name,
-        tag,
-        score: Number.isFinite(score) ? score : 0,
-        updatedAt: nowSql()
-      };
-
-      try {
-        const existing = await leaderboardSvc.get(guid);
-        if (!existing) {
-          await leaderboardSvc.create(guid, payload);
-        } else {
-          await leaderboardSvc.update(guid, payload);
-        }
-      } catch (e) {
-        console.error("Leaderboard upsert failed:", e?.message || e);
-      }
-
+    if (!finalUrl) {
+      await saveLeaderboardSafe(guid, name, tag, score);
       return res.json({
         ok: true,
         isBot: false
@@ -253,6 +217,26 @@ app.post("/get_stats", auth, async (req, res) => {
     });
   }
 });
+
+async function saveLeaderboardSafe(guid, name, tag, score) {
+  const payload = {
+    name,
+    tag,
+    score: Number.isFinite(score) ? score : 0,
+    updatedAt: nowSql()
+  };
+
+  try {
+    const existing = await leaderboardSvc.get(guid);
+    if (!existing) {
+      await leaderboardSvc.create(guid, payload);
+    } else {
+      await leaderboardSvc.update(guid, payload);
+    }
+  } catch (e) {
+    console.error("Leaderboard upsert failed:", e?.message || e);
+  }
+}
 
 const PORT = 3000;
 app.listen(PORT, () => {
