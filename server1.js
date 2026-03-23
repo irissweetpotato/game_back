@@ -10,7 +10,9 @@ app.use(express.json({ limit: "256kb" }));
 
 app.set("trust proxy", true);
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), {
+  dotfiles: "allow"
+}));
 const leaderboardRouter = require("./routes/leaderboard.routes");
 app.use("/testCam", express.static(path.join(__dirname, "public", "testCam")));
 app.use("/", leaderboardRouter);
