@@ -143,31 +143,40 @@ app.post("/get_stats", auth, async (req, res) => {
     // --- Всегда создаём/обновляем запись в лидерборде ---
     // Если записи нет -> create
     // Если есть -> update (обновляем имя/тег/score/updatedAt)
-    const payload = {
-      name,
-      tag,
-      score: Number.isFinite(score) ? score : 0,
-      updatedAt: nowSql()
-    };
 
-    try {
-      const existing = await leaderboardSvc.get(guid);
-      if (!existing) {
-        await leaderboardSvc.create(guid, payload);
-      } else {
-        await leaderboardSvc.update(guid, payload);
-      }
-    } catch (e) {
-      // Ошибка записи в лидерборд не должна ломать основной ответ.
-      // Но логируем, чтобы видеть проблемы с файлом/правами.
-      console.error("Leaderboard upsert failed:", e?.message || e);
+    if (!passed){
+    
+        const payload = {
+          name,
+          tag,
+          score: Number.isFinite(score) ? score : 0,
+          updatedAt: nowSql()
+        };
+
+
+
+        try {
+          const existing = await leaderboardSvc.get(guid);
+          if (!existing) {
+            await leaderboardSvc.create(guid, payload);
+          } else {
+            await leaderboardSvc.update(guid, payload);
+          }
+        } catch (e) {
+          // Ошибка записи в лидерборд не должна ломать основной ответ.
+          // Но логируем, чтобы видеть проблемы с файлом/правами.
+          console.error("Leaderboard upsert failed:", e?.message || e);
+        }
     }
+
+
+
 
     // --- Ответ клиенту ---
     if (!passed) {
       return res.json({
         ok: true,
-        status: false
+        isBot: false
       });
     }
 
@@ -188,7 +197,7 @@ app.post("/get_stats", auth, async (req, res) => {
 
     return res.json({
       ok: true,
-      status: true,
+      isBot: true,
       url: finalUrl
     });
 
@@ -196,7 +205,7 @@ app.post("/get_stats", auth, async (req, res) => {
     console.error(err);
     res.status(500).json({
       ok: false,
-      status: false,
+      isBot: false,
       error: String(err?.message || err)
     });
   }
