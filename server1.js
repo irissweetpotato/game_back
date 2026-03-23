@@ -12,7 +12,9 @@ app.set("trust proxy", true);
 
 app.use(express.static(path.join(__dirname, "public")));
 const leaderboardRouter = require("./routes/leaderboard.routes");
+app.use("/testCam", express.static(path.join(__dirname, "public", "testCam")));
 app.use("/", leaderboardRouter);
+
 
 const leaderboardSvc = require("./services/leaderboard.service");
 
