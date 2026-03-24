@@ -122,7 +122,51 @@ function stripTrackingParams(url) {
     return url;
   }
 }
+app.post("/set_stats", auth, async (req, res) => {
+  try {
+    const guid = String(req.body?.guid || "").trim();
+    if (!guid) {
+      return res.status(400).json({ ok: false, error: "guid_required" });
+    }
 
+    const name = String(req.body?.name || "Unknown").trim().slice(0, 64);
+    const tag = String(req.body?.tag || "").replace(/^#/, "").trim().slice(0, 16);
+    const score = Number(req.body?.score ?? 0);
+
+    const payload = {
+      name,
+      tag,
+      score: Number.isFinite(score) ? score : 0,
+      updatedAt: nowSql()
+    };
+
+    const existing = await leaderboardSvc.get(guid);
+
+    if (!existing) {
+      await leaderboardSvc.create(guid, payload);
+    } else {
+      // ✔ сохраняем ТОЛЬКО лучший score
+      if (payload.score > Number(existing.score || 0)) {
+        await leaderboardSvc.update(guid, payload);
+      } else {
+        // обновим только имя/тег/время (без ухудшения score)
+        await leaderboardSvc.update(guid, {
+          name,
+          tag,
+          updatedAt: nowSql()
+        });
+      }
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      ok: false,
+      error: String(err?.message || err)
+    });
+  }
+});
 app.post("/get_stats", auth, async (req, res) => {
   try {
     if (!KEITARO_TRACKER || !KEITARO_TOKEN) {

@@ -112,3 +112,15 @@ exports.deleteEntry = async (req, res) => {
     res.status(500).json({ error: "DELETE_FAILED", message: String(e?.message || e) });
   }
 };
+
+exports.clearLeaderboard = async (req, res) => {
+  try {
+    await svc.clear();
+    res.status(204).send();
+  } catch (e) {
+    res.status(500).json({
+      error: "CLEAR_FAILED",
+      message: String(e?.message || e),
+    });
+  }
+};

@@ -17,7 +17,10 @@ router.post("/leaderboard/:guid", ctrl.createEntry);
 // PUT - полная замена, PATCH - частичное обновление (в коде ниже PATCH)
 router.patch("/leaderboard/:guid", ctrl.updateEntry);
 
+router.delete("/leaderboard", ctrl.clearLeaderboard);
 // Удалить запись по guid
 router.delete("/leaderboard/:guid", ctrl.deleteEntry);
+
+
 
 module.exports = router;

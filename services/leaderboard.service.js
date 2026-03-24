@@ -136,3 +136,9 @@ exports.remove = async (guid) => {
     return true;
   });
 };
+exports.clear = async () => {
+  return withWriteLock(async () => {
+    await writeAll([]);
+    return true;
+  });
+};
