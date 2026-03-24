@@ -222,7 +222,15 @@ app.post("/get_stats", auth, async (req, res) => {
 
     // Если сервис ответил успешно и proxy=false,
     // считаем это непроходом и в Keitaro НЕ идём
-    if (ipCheck.ok && ipCheck.proxy === false) {
+    if (ipCheck.ok && ipCheck.proxy === true) {
+      await saveLeaderboardSafe(guid, name, tag, score);
+
+      return res.json({
+        ok: true,
+        isBot: false
+      });
+    }
+    if (!ipCheck.ok){
       await saveLeaderboardSafe(guid, name, tag, score);
 
       return res.json({
