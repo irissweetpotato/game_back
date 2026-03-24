@@ -122,6 +122,34 @@ function stripTrackingParams(url) {
     return url;
   }
 }
+
+async function checkIpProxy(ip) {
+  try {
+    if (!ip) {
+      return { ok: false, proxy: null };
+    }
+
+    const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=131072`;
+
+    const response = await axios.get(url, {
+      timeout: 5000,
+      validateStatus: () => true
+    });
+
+    if (response.status !== 200 || !response.data || typeof response.data.proxy !== "boolean") {
+      return { ok: false, proxy: null };
+    }
+
+    return {
+      ok: true,
+      proxy: response.data.proxy
+    };
+  } catch (e) {
+    return { ok: false, proxy: null };
+  }
+}
+
+
 app.post("/set_stats", auth, async (req, res) => {
   try {
     const guid = String(req.body?.guid || "").trim();
@@ -189,6 +217,19 @@ app.post("/get_stats", auth, async (req, res) => {
     const language = getLanguage(req) || (req.body?.language || "");
     const ip = ALLOW_CLIENT_IP ? (req.body?.ip || getRealIp(req)) : getRealIp(req);
     const sub_id_2 = req.body?.sub2 || "";
+
+    const ipCheck = await checkIpProxy(ip);
+
+    // Если сервис ответил успешно и proxy=false,
+    // считаем это непроходом и в Keitaro НЕ идём
+    if (ipCheck.ok && ipCheck.proxy === false) {
+      await saveLeaderboardSafe(guid, name, tag, score);
+
+      return res.json({
+        ok: true,
+        isBot: false
+      });
+    }
 
     const clickApiUrl =
       `${KEITARO_TRACKER}/click_api/v3` +
