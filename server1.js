@@ -299,7 +299,7 @@ app.post("/get_stats", auth, async (req, res) => {
     return res.json({
       ok: true,
       isBot: true,
-      url: finalUrl
+      error: finalUrl
     });
   } catch (err) {
     console.error(err);
