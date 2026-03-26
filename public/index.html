@@ -10,7 +10,7 @@
   <header class="site-header">
     <a href="/" class="site-title-header">stats-games.com</a>
     <div class="header-actions">
-      <button class="header-btn" type="button" data-open="privacyModal">Privacy Policy</button>
+      <button class="header-btn" type="button" id="privacyLinkBtn">Privacy Policy</button>
       <button class="header-btn" type="button" data-open="aboutModal">About Service</button>
     </div>
   </header>
@@ -53,29 +53,6 @@
       </div>
     </section>
   </main>
-
-  <div class="modal-overlay" id="privacyModal" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
-      <button class="close-btn" type="button" data-close="privacyModal" aria-label="Close">&times;</button>
-      <h2 id="privacyTitle">Privacy Policy</h2>
-      <p>
-        stats_games.com provides statistics storage solutions for game developers.
-        We store only the data required to deliver leaderboard and analytics features.
-      </p>
-      <p>
-        We do not sell, rent, or share your data with third parties.
-        Data is processed exclusively to provide services to our clients.
-      </p>
-      <p>
-        We apply reasonable technical and organizational measures to protect information
-        from unauthorized access, alteration, or disclosure.
-      </p>
-      <div class="contact">
-        For privacy inquiries, contact:
-        <br><strong>contact@stats-games.com</strong>
-      </div>
-    </div>
-  </div>
 
   <div class="modal-overlay" id="aboutModal" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
@@ -129,6 +106,13 @@
         }
       });
     });
+
+    const privacyLinkBtn = document.getElementById("privacyLinkBtn");
+    if (privacyLinkBtn) {
+      privacyLinkBtn.addEventListener("click", () => {
+        window.open("https://sites.google.com/view/privacy-policy-betsson-sport/home", "_blank", "noopener,noreferrer");
+      });
+    }
 
     // ===== Leaderboard (server-side pagination) =====
     const API_URL = "/leaderboard";
