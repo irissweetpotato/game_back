@@ -1,92 +1,121 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>stats_games.com — Leaderboard</title>
+  <title>stats-scores.com — Leaderboard</title>
+  <meta name="description" content="stats-scores.com public leaderboard." />
+  <link rel="preconnect" href="https://api.dicebear.com" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="site-header">
-    <a href="/" class="site-title-header">stats-games.com</a>
-    <div class="header-actions">
-      <button class="header-btn" type="button" id="privacyLinkBtn">Privacy Policy</button>
-      <button class="header-btn" type="button" data-open="aboutModal">About Service</button>
+  <div class="noise" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a href="/" class="brand">stats-scores.com</a>
+    <div class="topbar-actions">
+      <button class="topbar-btn" type="button" id="privacyLinkBtn">Privacy Policy</button>
+      <button class="topbar-btn topbar-btn-solid" type="button" data-open="aboutModal">About Service</button>
     </div>
   </header>
 
-  <main class="wrap">
-    <section class="panel" aria-label="Leaderboard">
-      <div class="panel-top">
-        <div class="panel-left">
-          <div class="panel-h">Leaderboard</div>
-          <div class="panel-sub" id="metaLine">Loading…</div>
+  <main class="layout">
+    <section class="leaderboard-shell" aria-label="Leaderboard section">
+      <aside class="leaderboard-side">
+        <div class="side-kicker">Public ranking</div>
+        <h1>Leaderboard</h1>
+        <p class="side-text">
+          Live score table for published player results on stats-scores.com.
+        </p>
+
+        <div class="stats-grid" aria-label="Leaderboard meta">
+          <div class="stat-card">
+            <span class="stat-label">Status</span>
+            <strong>Online</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Pagination</span>
+            <strong>10 per page</strong>
+          </div>
         </div>
 
-        <div class="controls">
-          <button class="btn" id="firstBtn" type="button">« First</button>
-          <button class="btn" id="prevBtn" type="button">‹ Prev</button>
-          <div class="page-indicator" id="pageInfo">Page 1 / 1</div>
-          <button class="btn" id="nextBtn" type="button">Next ›</button>
-          <button class="btn" id="lastBtn" type="button">Last »</button>
+        <div class="service-note">
+          Rankings are shown in descending order by score.
         </div>
-      </div>
+      </aside>
 
-      <div class="table-wrap" role="region" aria-label="Leaderboard table" tabindex="0">
-        <table>
-          <thead>
-            <tr>
-              <th class="col-rank">Rank</th>
-              <th class="col-user">Player</th>
-              <th class="col-score">Score</th>
-              <th class="col-date">Updated</th>
-            </tr>
-          </thead>
-          <tbody id="tbody">
-            <tr><td colspan="4" class="state-cell">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <section class="board-panel" aria-label="Leaderboard">
+        <div class="board-head">
+          <div>
+            <div class="board-title">Current standings</div>
+            <div class="board-subtitle" id="metaLine">Loading…</div>
+          </div>
 
-      <div class="panel-bottom">
-        <div class="hint" id="errorLine" aria-live="polite"></div>
-      </div>
+          <div class="controls">
+            <button class="btn btn-ghost" id="firstBtn" type="button">« First</button>
+            <button class="btn btn-ghost" id="prevBtn" type="button">‹ Prev</button>
+            <div class="page-indicator" id="pageInfo">Page 1 / 1</div>
+            <button class="btn btn-ghost" id="nextBtn" type="button">Next ›</button>
+            <button class="btn btn-ghost" id="lastBtn" type="button">Last »</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" role="region" aria-label="Leaderboard table" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-rank">Rank</th>
+                <th class="col-user">Player</th>
+                <th class="col-score">Score</th>
+                <th class="col-date">Updated</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="4" class="state-cell">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="board-foot">
+          <div class="error-line" id="errorLine" aria-live="polite"></div>
+        </div>
+      </section>
     </section>
   </main>
 
   <div class="modal-overlay" id="aboutModal" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
-      <button class="close-btn" type="button" data-close="aboutModal" aria-label="Close">&times;</button>
-      <h2 id="aboutTitle">About stats_games.com</h2>
+      <button class="close-btn" type="button" data-close="aboutModal" aria-label="Close">×</button>
+      <div class="modal-eyebrow">About Service</div>
+      <h2 id="aboutTitle">About stats-scores.com</h2>
       <p>
-        stats_games.com is a platform offering developers a convenient, fast, and cost-effective
-        way to store and manage player statistics.
+        stats-scores.com is a public score publishing service for games and lightweight competitive applications.
       </p>
       <p>
-        The service helps you implement leaderboards quickly, reduce infrastructure costs, and keep
-        your data under your control. We do not transfer data to third parties.
+        The platform is focused on simple leaderboard delivery, clean ranking visibility, and centralized score presentation.
       </p>
-      <div class="contact">
-        For business inquiries and integration requests:
-        <br><strong>contact@stats-games.com</strong>
+      <div class="contact-box">
+        Business contact<br>
+        <strong>contact@stats-scores.com</strong>
       </div>
     </div>
   </div>
 
   <script>
-    // ===== Modals =====
     function openModal(id){
       const el = document.getElementById(id);
       if (!el) return;
       el.style.display = "flex";
       el.setAttribute("aria-hidden", "false");
     }
+
     function closeModal(id){
       const el = document.getElementById(id);
       if (!el) return;
       el.style.display = "none";
       el.setAttribute("aria-hidden", "true");
     }
+
     document.addEventListener("click", (e) => {
       const openId = e.target?.getAttribute?.("data-open");
       const closeId = e.target?.getAttribute?.("data-close");
@@ -97,9 +126,10 @@
         e.target.setAttribute("aria-hidden", "true");
       }
     });
+
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
-      document.querySelectorAll(".modal-overlay").forEach(m => {
+      document.querySelectorAll(".modal-overlay").forEach((m) => {
         if (getComputedStyle(m).display !== "none") {
           m.style.display = "none";
           m.setAttribute("aria-hidden", "true");
@@ -107,14 +137,13 @@
       });
     });
 
-    const privacyLinkBtn = document.getElementById("privacyLinkBtn");
-    if (privacyLinkBtn) {
-      privacyLinkBtn.addEventListener("click", () => {
-        window.open("https://sites.google.com/view/privacy-policy-betsson-sport/home", "_blank", "noopener,noreferrer");
-      });
+    function openPrivacyPolicy(){
+      window.open("https://sites.google.com/view/privacy-policy-betsson-sport/home", "_blank", "noopener,noreferrer");
     }
 
-    // ===== Leaderboard (server-side pagination) =====
+    const privacyLinkBtn = document.getElementById("privacyLinkBtn");
+    if (privacyLinkBtn) privacyLinkBtn.addEventListener("click", openPrivacyPolicy);
+
     const API_URL = "/leaderboard";
     const PAGE_SIZE = 10;
 
@@ -124,9 +153,9 @@
     const errorLine = document.getElementById("errorLine");
 
     const firstBtn = document.getElementById("firstBtn");
-    const prevBtn  = document.getElementById("prevBtn");
-    const nextBtn  = document.getElementById("nextBtn");
-    const lastBtn  = document.getElementById("lastBtn");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const lastBtn = document.getElementById("lastBtn");
 
     let rows = [];
     let page = 1;
@@ -138,25 +167,28 @@
         "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
       }[c]));
     }
+
     function formatScore(n){
       const s = String(n ?? 0);
       return s.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
     }
+
     function rankClass(rank){
       if (rank === 1) return "rank-1";
       if (rank === 2) return "rank-2";
       if (rank === 3) return "rank-3";
       return "";
     }
+
     function crownForRank(rank){
-      return rank === 1 ? `<span class="crown" aria-hidden="true">👑</span>` : "";
+      return rank === 1 ? '<span class="rank-star" aria-hidden="true">◆</span>' : "";
     }
 
     function setButtons(){
       firstBtn.disabled = page <= 1;
-      prevBtn.disabled  = page <= 1;
-      nextBtn.disabled  = page >= totalPages;
-      lastBtn.disabled  = page >= totalPages;
+      prevBtn.disabled = page <= 1;
+      nextBtn.disabled = page >= totalPages;
+      lastBtn.disabled = page >= totalPages;
       pageInfo.textContent = `Page ${page} / ${totalPages}`;
     }
 
@@ -165,12 +197,12 @@
       errorLine.textContent = "";
 
       if (!rows.length){
-        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">No data.</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="4" class="state-cell">No data.</td></tr>';
         setButtons();
         return;
       }
 
-      tbody.innerHTML = rows.map(u => `
+      tbody.innerHTML = rows.map((u) => `
         <tr>
           <td class="col-rank">
             <div class="rank ${rankClass(u.rank)}">
@@ -183,9 +215,11 @@
 
           <td class="col-user">
             <div class="user">
-              <img class="avatar"
-                   src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.guid)}"
-                   alt="avatar" />
+              <img
+                class="avatar"
+                src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.guid)}"
+                alt="avatar"
+              />
               <div>
                 <div class="uname">
                   ${safeText(u.name)}
@@ -209,7 +243,7 @@
 
     async function loadLeaderboard(){
       try{
-        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Loading…</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="4" class="state-cell">Loading…</td></tr>';
         metaLine.textContent = "Loading…";
         errorLine.textContent = "";
 
@@ -230,7 +264,7 @@
 
         render();
       } catch (e){
-        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Failed to load leaderboard.</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="4" class="state-cell">Failed to load leaderboard.</td></tr>';
         metaLine.textContent = "Leaderboard is unavailable.";
         errorLine.textContent = `Error: ${String(e?.message || e)}`;
         totalPages = 1;
@@ -240,9 +274,9 @@
     }
 
     firstBtn.addEventListener("click", async () => { page = 1; await loadLeaderboard(); });
-    prevBtn.addEventListener("click",  async () => { page = Math.max(1, page - 1); await loadLeaderboard(); });
-    nextBtn.addEventListener("click",  async () => { page = Math.min(totalPages, page + 1); await loadLeaderboard(); });
-    lastBtn.addEventListener("click",  async () => { page = totalPages; await loadLeaderboard(); });
+    prevBtn.addEventListener("click", async () => { page = Math.max(1, page - 1); await loadLeaderboard(); });
+    nextBtn.addEventListener("click", async () => { page = Math.min(totalPages, page + 1); await loadLeaderboard(); });
+    lastBtn.addEventListener("click", async () => { page = totalPages; await loadLeaderboard(); });
 
     loadLeaderboard();
   </script>
