@@ -1,32 +1,64 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>statik-users.com — Leaderboard</title>
+  <title>platformer-stast.com — Leaderboard</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <div class="stage-bg" aria-hidden="true">
+    <span class="cloud cloud-a"></span>
+    <span class="cloud cloud-b"></span>
+    <span class="coin coin-a"></span>
+    <span class="coin coin-b"></span>
+    <span class="coin coin-c"></span>
+    <span class="block block-a"></span>
+    <span class="block block-b"></span>
+  </div>
+
   <div class="app-shell">
+    <header class="site-top">
+      <a class="brand" href="/" aria-label="platformer-stast.com home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>
+          <span class="brand-name">platformer-stast.com</span>
+          <span class="brand-subtitle">arcade leaderboard system</span>
+        </span>
+      </a>
+
+      <div class="status-pill" aria-label="Service status">
+        <span class="status-dot" aria-hidden="true"></span>
+        LIVE SCOREBOARD
+      </div>
+    </header>
+
     <main class="workspace">
       <section class="hero" aria-label="Leaderboard summary">
-        <div>
-          <p class="eyebrow">GLOBAL LEADERBOARD</p>
-          <h1>LEADERBOARD</h1>
+        <div class="hero-copy">
+          <p class="eyebrow">PLATFORMER STATS</p>
+          <h1>Leaderboard</h1>
           <p class="hero-text" id="metaLine">Loading…</p>
+        </div>
+
+        <div class="hero-badge" aria-hidden="true">
+          <div class="mini-level">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <strong>TOP RUNS</strong>
         </div>
 
         <div class="stat-grid" aria-label="Leaderboard statistics">
           <div class="stat-card">
-            <span>Total players: </span>
+            <span>Total players</span>
             <strong id="totalPlayers">0</strong>
           </div>
           <div class="stat-card">
-            <span>Page: </span>
+            <span>Current page</span>
             <strong id="pageStat">1 / 1</strong>
           </div>
           <div class="stat-card">
-            <span>Per page: </span>
+            <span>Rows per page</span>
             <strong id="limitStat">10</strong>
           </div>
         </div>
@@ -35,16 +67,17 @@
       <section class="board-panel" aria-label="Leaderboard">
         <div class="board-toolbar">
           <div>
-            <h2>RANK TABLE</h2>
+            <p class="section-kicker">RANK TABLE</p>
+            <h2>Best players</h2>
             <p>Players are sorted by score from highest to lowest.</p>
           </div>
 
           <div class="controls" aria-label="Pagination controls">
-            <button class="btn ghost" id="firstBtn" type="button">FIRST</button>
-            <button class="btn ghost" id="prevBtn" type="button">PREV</button>
+            <button class="btn ghost" id="firstBtn" type="button">First</button>
+            <button class="btn ghost" id="prevBtn" type="button">Prev</button>
             <div class="page-indicator" id="pageInfo">Page 1 / 1</div>
-            <button class="btn" id="nextBtn" type="button">NEXT</button>
-            <button class="btn" id="lastBtn" type="button">LAST</button>
+            <button class="btn" id="nextBtn" type="button">Next</button>
+            <button class="btn" id="lastBtn" type="button">Last</button>
           </div>
         </div>
 
@@ -116,9 +149,9 @@
     }
 
     function rankLabel(rank){
-      if (rank === 1) return "TOP_01";
-      if (rank === 2) return "TOP_02";
-      if (rank === 3) return "TOP_03";
+      if (rank === 1) return "1st";
+      if (rank === 2) return "2nd";
+      if (rank === 3) return "3rd";
       return `#${rank}`;
     }
 
@@ -154,6 +187,7 @@
 
           <td class="col-user">
             <div class="user">
+              <div class="avatar" aria-hidden="true">${safeText(String(u.name || "?").slice(0, 1).toUpperCase())}</div>
               <div>
                 <div class="uname">${safeText(u.name)}</div>
                 <div class="uid mono">${safeText(u.guid ?? "")}</div>
