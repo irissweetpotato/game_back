@@ -80,9 +80,11 @@
     tbody td {
       padding: 9px 12px;
       border-bottom: 1px solid #1f2937;
-      vertical-align: top;
-      max-width: 360px;
-      overflow-wrap: anywhere;
+      vertical-align: middle;
+      max-width: none;
+      white-space: nowrap;
+      overflow: visible;
+      text-overflow:clip;
       line-height: 1.35;
     }
     tbody tr:hover {
