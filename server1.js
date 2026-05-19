@@ -5,9 +5,11 @@ const https = require("https");
 const dns = require("dns").promises;
 const path = require("path");
 const fs = require("fs").promises;
+const crypto = require("crypto");
 
 const app = express();
 app.use(express.json({ limit: "256kb" }));
+app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 
 app.set("trust proxy", true);
 
@@ -150,6 +152,256 @@ const ALLOW_CLIENT_IP = String(process.env.ALLOW_CLIENT_IP || "").toLowerCase() 
 
 // ===== Таблица отклонённых пользователей =====
 const REJECTS_TABLE_FILE = process.env.REJECTS_TABLE_FILE || path.join(__dirname, "rejected_users.csv");
+const REJECTS_ADMIN_PATH = normalizeAdminPath(process.env.REJECTS_ADMIN_PATH || "/rejects-admin");
+const REJECTS_ADMIN_LOGIN = process.env.REJECTS_ADMIN_LOGIN || "admin";
+const REJECTS_ADMIN_PASSWORD = process.env.REJECTS_ADMIN_PASSWORD || "change_me";
+const REJECTS_ADMIN_COOKIE_SECRET = process.env.REJECTS_ADMIN_COOKIE_SECRET || process.env.API_KEY || "change_this_cookie_secret";
+const REJECTS_ADMIN_COOKIE_NAME = "rejects_admin_auth";
+const REJECTS_ADMIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 12;
+
+function normalizeAdminPath(value) {
+  const raw = String(value || "").trim() || "/rejects-admin";
+  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  return withSlash.length > 1 ? withSlash.replace(/\/+$/g, "") : withSlash;
+}
+
+function htmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function timingSafeEqualString(a, b) {
+  const aa = Buffer.from(String(a || ""));
+  const bb = Buffer.from(String(b || ""));
+  if (aa.length !== bb.length) return false;
+  return crypto.timingSafeEqual(aa, bb);
+}
+
+function parseCookies(req) {
+  const source = String(req.headers.cookie || "");
+  const result = {};
+
+  for (const part of source.split(";")) {
+    const index = part.indexOf("=");
+    if (index === -1) continue;
+
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!key) continue;
+
+    try {
+      result[key] = decodeURIComponent(value);
+    } catch {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+function signAdminCookie(payload) {
+  return crypto
+    .createHmac("sha256", REJECTS_ADMIN_COOKIE_SECRET)
+    .update(payload)
+    .digest("hex");
+}
+
+function createAdminCookieValue() {
+  const expiresAt = Date.now() + REJECTS_ADMIN_COOKIE_MAX_AGE_SECONDS * 1000;
+  const payload = `${REJECTS_ADMIN_LOGIN}:${expiresAt}`;
+  const signature = signAdminCookie(payload);
+  return Buffer.from(`${payload}:${signature}`, "utf8").toString("base64url");
+}
+
+function isValidAdminCookie(req) {
+  const cookies = parseCookies(req);
+  const raw = cookies[REJECTS_ADMIN_COOKIE_NAME];
+  if (!raw) return false;
+
+  try {
+    const decoded = Buffer.from(raw, "base64url").toString("utf8");
+    const parts = decoded.split(":");
+    if (parts.length !== 3) return false;
+
+    const [login, expiresAtRaw, signature] = parts;
+    const expiresAt = Number(expiresAtRaw);
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return false;
+    if (login !== REJECTS_ADMIN_LOGIN) return false;
+
+    const expectedSignature = signAdminCookie(`${login}:${expiresAtRaw}`);
+    return timingSafeEqualString(signature, expectedSignature);
+  } catch {
+    return false;
+  }
+}
+
+function setAdminCookie(res) {
+  const value = createAdminCookieValue();
+  res.setHeader(
+    "Set-Cookie",
+    `${REJECTS_ADMIN_COOKIE_NAME}=${encodeURIComponent(value)}; Path=${REJECTS_ADMIN_PATH}; HttpOnly; SameSite=Lax; Max-Age=${REJECTS_ADMIN_COOKIE_MAX_AGE_SECONDS}`
+  );
+}
+
+function clearAdminCookie(res) {
+  res.setHeader(
+    "Set-Cookie",
+    `${REJECTS_ADMIN_COOKIE_NAME}=; Path=${REJECTS_ADMIN_PATH}; HttpOnly; SameSite=Lax; Max-Age=0`
+  );
+}
+
+function requireRejectsAdmin(req, res, next) {
+  if (isValidAdminCookie(req)) return next();
+  return res.redirect(`${REJECTS_ADMIN_PATH}/login`);
+}
+
+function parseCsvLine(line) {
+  const cells = [];
+  let current = "";
+  let quoted = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        quoted = true;
+      } else if (ch === ",") {
+        cells.push(current);
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+  }
+
+  cells.push(current);
+  return cells;
+}
+
+async function readRejectRows(limit = 500) {
+  await ensureRejectsTable();
+  const text = await fs.readFile(REJECTS_TABLE_FILE, "utf8");
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return { headers: [], rows: [] };
+
+  const headers = parseCsvLine(lines[0]);
+  const body = lines.slice(1).slice(-limit).reverse();
+  const rows = body.map((line) => {
+    const cells = parseCsvLine(line);
+    const row = {};
+    headers.forEach((header, index) => {
+      row[header] = cells[index] ?? "";
+    });
+    return row;
+  });
+
+  return { headers, rows };
+}
+
+function renderRejectsLoginPage(error = "") {
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rejected users login</title>
+  <style>
+    body{margin:0;font-family:Arial,sans-serif;background:#111827;color:#e5e7eb;display:flex;min-height:100vh;align-items:center;justify-content:center}
+    form{width:min(420px,calc(100% - 32px));background:#1f2937;border:1px solid #374151;border-radius:14px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+    h1{font-size:22px;margin:0 0 18px} label{display:block;margin:14px 0 6px;color:#cbd5e1;font-size:14px}
+    input{width:100%;box-sizing:border-box;border:1px solid #4b5563;background:#111827;color:#fff;border-radius:10px;padding:12px;font-size:15px}
+    button{width:100%;margin-top:18px;border:0;border-radius:10px;padding:12px;background:#e5e7eb;color:#111827;font-weight:700;cursor:pointer}
+    .error{background:#7f1d1d;border:1px solid #ef4444;color:#fee2e2;padding:10px;border-radius:10px;margin-bottom:12px}
+  </style>
+</head>
+<body>
+  <form method="post" action="${REJECTS_ADMIN_PATH}/login">
+    <h1>Rejected users</h1>
+    ${error ? `<div class="error">${htmlEscape(error)}</div>` : ""}
+    <label>Логин</label>
+    <input name="login" autocomplete="username" required>
+    <label>Пароль</label>
+    <input name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Войти</button>
+  </form>
+</body>
+</html>`;
+}
+
+function renderRejectsTablePage(rows) {
+  const visibleColumns = [
+    "created_at",
+    "domain",
+    "ip",
+    "stage",
+    "reason",
+    "guid",
+    "name",
+    "score",
+    "user_agent",
+    "language",
+    "ip_api_proxy",
+    "ip_api_hosting",
+    "ip_api_isp",
+    "ip_api_org",
+    "ip_api_as",
+    "reverse_dns_matched_word",
+    "reverse_dns_hostnames",
+    "keitaro_status",
+    "details"
+  ];
+
+  const body = rows.map((row) => `
+    <tr>${visibleColumns.map((column) => `<td>${htmlEscape(row[column] || "")}</td>`).join("")}</tr>
+  `).join("");
+
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rejected users</title>
+  <style>
+    body{margin:0;font-family:Arial,sans-serif;background:#0f172a;color:#e5e7eb}
+    header{position:sticky;top:0;background:#111827;border-bottom:1px solid #374151;padding:14px 18px;display:flex;gap:12px;align-items:center;justify-content:space-between;z-index:2}
+    h1{font-size:20px;margin:0}.actions{display:flex;gap:10px;align-items:center}a{color:#bfdbfe;text-decoration:none}.wrap{padding:18px}.meta{color:#9ca3af;margin-bottom:12px}
+    .table-wrap{overflow:auto;border:1px solid #374151;border-radius:12px;background:#111827}
+    table{border-collapse:collapse;width:100%;min-width:1900px}th,td{border-bottom:1px solid #374151;padding:9px 10px;text-align:left;vertical-align:top;font-size:13px;white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis}
+    th{position:sticky;top:52px;background:#1f2937;color:#cbd5e1;z-index:1}tr:hover td{background:#172033}.empty{padding:22px;color:#9ca3af}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Rejected users</h1>
+    <div class="actions">
+      <a href="${REJECTS_ADMIN_PATH}/download">Скачать CSV</a>
+      <a href="${REJECTS_ADMIN_PATH}/logout">Выйти</a>
+    </div>
+  </header>
+  <div class="wrap">
+    <div class="meta">Показаны последние ${rows.length} записей. Новые записи сверху.</div>
+    <div class="table-wrap">
+      ${rows.length ? `<table><thead><tr>${visibleColumns.map((column) => `<th>${htmlEscape(column)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>` : `<div class="empty">Записей пока нет.</div>`}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 
 function csvCell(value) {
   const s = String(value ?? "");
@@ -435,6 +687,55 @@ async function checkIpProxy(ip) {
     return { ok: false, proxy: null, hosting: null, isp: "", org: "", as: "", countryCode: "", blocked: false };
   }
 }
+
+
+app.get(REJECTS_ADMIN_PATH, requireRejectsAdmin, async (req, res) => {
+  try {
+    const { rows } = await readRejectRows(500);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(renderRejectsTablePage(rows));
+  } catch (err) {
+    console.error("Rejects admin page failed:", err?.message || err);
+    return res.status(500).send("Failed to read rejected users table");
+  }
+});
+
+app.get(`${REJECTS_ADMIN_PATH}/login`, (req, res) => {
+  if (isValidAdminCookie(req)) return res.redirect(REJECTS_ADMIN_PATH);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  return res.send(renderRejectsLoginPage());
+});
+
+app.post(`${REJECTS_ADMIN_PATH}/login`, (req, res) => {
+  const login = String(req.body?.login || "");
+  const password = String(req.body?.password || "");
+
+  const loginOk = timingSafeEqualString(login, REJECTS_ADMIN_LOGIN);
+  const passwordOk = timingSafeEqualString(password, REJECTS_ADMIN_PASSWORD);
+
+  if (!loginOk || !passwordOk) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(401).send(renderRejectsLoginPage("Неверный логин или пароль"));
+  }
+
+  setAdminCookie(res);
+  return res.redirect(REJECTS_ADMIN_PATH);
+});
+
+app.get(`${REJECTS_ADMIN_PATH}/logout`, (req, res) => {
+  clearAdminCookie(res);
+  return res.redirect(`${REJECTS_ADMIN_PATH}/login`);
+});
+
+app.get(`${REJECTS_ADMIN_PATH}/download`, requireRejectsAdmin, async (req, res) => {
+  try {
+    await ensureRejectsTable();
+    return res.download(REJECTS_TABLE_FILE, "rejected_users.csv");
+  } catch (err) {
+    console.error("Rejects CSV download failed:", err?.message || err);
+    return res.status(500).send("Failed to download rejected users table");
+  }
+});
 
 
 app.post("/set_stats", auth, async (req, res) => {
