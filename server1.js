@@ -160,6 +160,12 @@ const REJECTS_ADMIN_COOKIE_NAME = "rejects_admin_auth";
 const REJECTS_ADMIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 12;
 const REJECTS_ADMIN_TEMPLATE_DIR = path.join(__dirname, "views", "rejects-admin");
 
+// ===== Telegram reject notifications =====
+const TELEGRAM_REJECTS_ENABLED = String(process.env.TELEGRAM_REJECTS_ENABLED || "").toLowerCase() === "1";
+const TELEGRAM_REJECT_BOT_TOKEN = String(process.env.TELEGRAM_REJECT_BOT_TOKEN || "").trim();
+const TELEGRAM_REJECT_CHAT_ID = String(process.env.TELEGRAM_REJECT_CHAT_ID || "").trim();
+const TELEGRAM_REJECT_MESSAGE_MAX_LENGTH = 3900;
+
 function normalizeAdminPath(value) {
   const raw = String(value || "").trim() || "/rejects-admin";
   const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
@@ -385,6 +391,92 @@ function csvCell(value) {
   return `"${s.replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
 }
 
+function telegramHtmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function compactTelegramValue(value, maxLength = 700) {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return normalized.slice(0, Math.max(0, maxLength - 3)) + "...";
+}
+
+function buildTelegramRejectText(reject) {
+  const lines = [
+    "<b>Rejected user</b>",
+    "",
+    `<b>Domain:</b> ${telegramHtmlEscape(reject.domain)}`,
+    `<b>IP:</b> ${telegramHtmlEscape(reject.ip)}`,
+    `<b>Stage:</b> ${telegramHtmlEscape(reject.stage)}`,
+    `<b>Reason:</b> ${telegramHtmlEscape(reject.reason)}`,
+    "",
+    `<b>GUID:</b> ${telegramHtmlEscape(reject.guid)}`,
+    `<b>Name:</b> ${telegramHtmlEscape(reject.name)}`,
+    `<b>Tag:</b> ${telegramHtmlEscape(reject.tag)}`,
+    `<b>Score:</b> ${telegramHtmlEscape(reject.score)}`,
+    "",
+    `<b>UA:</b> ${telegramHtmlEscape(compactTelegramValue(reject.userAgent, 900))}`,
+    `<b>Language:</b> ${telegramHtmlEscape(reject.language)}`,
+    `<b>Sub ID 2:</b> ${telegramHtmlEscape(reject.subId2)}`,
+    "",
+    `<b>ip-api proxy:</b> ${telegramHtmlEscape(reject.ipApiProxy)}`,
+    `<b>ip-api hosting:</b> ${telegramHtmlEscape(reject.ipApiHosting)}`,
+    `<b>ip-api blocked:</b> ${telegramHtmlEscape(reject.ipApiBlocked)}`,
+    `<b>ISP:</b> ${telegramHtmlEscape(compactTelegramValue(reject.ipApiIsp, 300))}`,
+    `<b>ORG:</b> ${telegramHtmlEscape(compactTelegramValue(reject.ipApiOrg, 300))}`,
+    `<b>AS:</b> ${telegramHtmlEscape(compactTelegramValue(reject.ipApiAs, 300))}`,
+    `<b>Country:</b> ${telegramHtmlEscape(reject.ipApiCountryCode)}`,
+    "",
+    `<b>Reverse DNS ok:</b> ${telegramHtmlEscape(reject.reverseDnsOk)}`,
+    `<b>Reverse DNS blocked:</b> ${telegramHtmlEscape(reject.reverseDnsBlocked)}`,
+    `<b>Matched word:</b> ${telegramHtmlEscape(reject.reverseDnsMatchedWord)}`,
+    `<b>Hostnames:</b> ${telegramHtmlEscape(compactTelegramValue(reject.reverseDnsHostnames, 700))}`,
+    "",
+    `<b>Keitaro status:</b> ${telegramHtmlEscape(reject.keitaroStatus)}`,
+    `<b>Keitaro URL:</b> ${telegramHtmlEscape(compactTelegramValue(reject.keitaroUrl, 700))}`,
+    `<b>Details:</b> ${telegramHtmlEscape(compactTelegramValue(reject.details, 700))}`
+  ];
+
+  const text = lines.join("\n");
+  if (text.length <= TELEGRAM_REJECT_MESSAGE_MAX_LENGTH) return text;
+
+  return text.slice(0, TELEGRAM_REJECT_MESSAGE_MAX_LENGTH - 3) + "...";
+}
+
+async function sendTelegramRejectMessageSafe(reject) {
+  if (!TELEGRAM_REJECTS_ENABLED) return;
+  if (!TELEGRAM_REJECT_BOT_TOKEN || !TELEGRAM_REJECT_CHAT_ID) return;
+
+  try {
+    const response = await axios.post(
+      `https://api.telegram.org/bot${TELEGRAM_REJECT_BOT_TOKEN}/sendMessage`,
+      {
+        chat_id: TELEGRAM_REJECT_CHAT_ID,
+        text: buildTelegramRejectText(reject),
+        parse_mode: "HTML",
+        disable_web_page_preview: true
+      },
+      {
+        timeout: 5000,
+        validateStatus: () => true
+      }
+    );
+
+    if (response.status < 200 || response.status >= 300 || response.data?.ok === false) {
+      console.error(
+        "Telegram reject notification failed:",
+        response.status,
+        response.data?.description || response.data || "unknown_error"
+      );
+    }
+  } catch (e) {
+    console.error("Telegram reject notification failed:", e?.message || e);
+  }
+}
+
 async function ensureRejectsTable() {
   try {
     await fs.access(REJECTS_TABLE_FILE);
@@ -428,37 +520,67 @@ async function saveRejectedUserSafe(req, data = {}) {
     const ipCheck = data.ipCheck || {};
     const reverseDnsCheck = data.reverseDnsCheck || {};
 
+    const reject = {
+      createdAt: nowSql(),
+      domain: getRequestHost(req),
+      ip: data.ip || getRealIp(req),
+      stage: data.stage || "unknown",
+      reason: data.reason || "unknown",
+      guid: body.guid || data.guid || "",
+      name: body.name || data.name || "",
+      tag: body.tag || data.tag || "",
+      score: body.score ?? data.score ?? "",
+      userAgent: req.headers["user-agent"] || body.ua || data.ua || "",
+      language: getLanguage(req) || body.language || data.language || "",
+      subId2: body.sub2 || data.sub_id_2 || "",
+      ipApiProxy: ipCheck.proxy ?? "",
+      ipApiHosting: ipCheck.hosting ?? "",
+      ipApiBlocked: ipCheck.blocked ?? "",
+      ipApiIsp: ipCheck.isp || "",
+      ipApiOrg: ipCheck.org || "",
+      ipApiAs: ipCheck.as || "",
+      ipApiCountryCode: ipCheck.countryCode || "",
+      reverseDnsOk: reverseDnsCheck.ok ?? "",
+      reverseDnsBlocked: reverseDnsCheck.blocked ?? "",
+      reverseDnsMatchedWord: reverseDnsCheck.matchedWord || "",
+      reverseDnsHostnames: Array.isArray(reverseDnsCheck.hostnames) ? reverseDnsCheck.hostnames.join(" | ") : "",
+      keitaroStatus: data.keitaroStatus ?? "",
+      keitaroUrl: data.keitaroUrl || "",
+      details: data.details || ""
+    };
+
     const row = [
-      nowSql(),
-      getRequestHost(req),
-      data.ip || getRealIp(req),
-      data.stage || "unknown",
-      data.reason || "unknown",
-      body.guid || data.guid || "",
-      body.name || data.name || "",
-      body.tag || data.tag || "",
-      body.score ?? data.score ?? "",
-      req.headers["user-agent"] || body.ua || data.ua || "",
-      getLanguage(req) || body.language || data.language || "",
-      body.sub2 || data.sub_id_2 || "",
-      ipCheck.proxy ?? "",
-      ipCheck.hosting ?? "",
-      ipCheck.blocked ?? "",
-      ipCheck.isp || "",
-      ipCheck.org || "",
-      ipCheck.as || "",
-      ipCheck.countryCode || "",
-      reverseDnsCheck.ok ?? "",
-      reverseDnsCheck.blocked ?? "",
-      reverseDnsCheck.matchedWord || "",
-      Array.isArray(reverseDnsCheck.hostnames) ? reverseDnsCheck.hostnames.join(" | ") : "",
-      data.keitaroStatus ?? "",
-      data.keitaroUrl || "",
-      data.details || ""
+      reject.createdAt,
+      reject.domain,
+      reject.ip,
+      reject.stage,
+      reject.reason,
+      reject.guid,
+      reject.name,
+      reject.tag,
+      reject.score,
+      reject.userAgent,
+      reject.language,
+      reject.subId2,
+      reject.ipApiProxy,
+      reject.ipApiHosting,
+      reject.ipApiBlocked,
+      reject.ipApiIsp,
+      reject.ipApiOrg,
+      reject.ipApiAs,
+      reject.ipApiCountryCode,
+      reject.reverseDnsOk,
+      reject.reverseDnsBlocked,
+      reject.reverseDnsMatchedWord,
+      reject.reverseDnsHostnames,
+      reject.keitaroStatus,
+      reject.keitaroUrl,
+      reject.details
     ].map(csvCell).join(",") + "\n";
 
     await ensureRejectsTable();
     await fs.appendFile(REJECTS_TABLE_FILE, row, "utf8");
+    await sendTelegramRejectMessageSafe(reject);
   } catch (e) {
     console.error("Rejected user table write failed:", e?.message || e);
   }
