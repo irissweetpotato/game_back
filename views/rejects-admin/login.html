@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rejected Users Login</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: #111827;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(420px, 100%);
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    h1 {
+      font-size: 22px;
+      margin: 0 0 6px;
+    }
+    .subtitle {
+      margin: 0 0 18px;
+      color: #9ca3af;
+      font-size: 14px;
+    }
+    label {
+      display: block;
+      margin: 14px 0 6px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+    input {
+      width: 100%;
+      border: 1px solid #4b5563;
+      background: #111827;
+      color: #fff;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 15px;
+      outline: none;
+    }
+    input:focus {
+      border-color: #9ca3af;
+    }
+    button {
+      width: 100%;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px;
+      background: #e5e7eb;
+      color: #111827;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .error {
+      background: #7f1d1d;
+      border: 1px solid #ef4444;
+      color: #fee2e2;
+      padding: 10px;
+      border-radius: 10px;
+      margin: 0 0 12px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="{{LOGIN_ACTION}}">
+    <h1>Rejected Users Panel</h1>
+    <p class="subtitle">Sign in to view the rejection table.</p>
+    {{ERROR_BLOCK}}
+    <label for="login">Username</label>
+    <input id="login" name="login" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Log in</button>
+  </form>
+</body>
+</html>

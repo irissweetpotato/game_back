@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rejected Users</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    .page-header {
+      background: #111827;
+      border-bottom: 1px solid #374151;
+      padding: 16px 18px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0;
+    }
+    .meta {
+      color: #9ca3af;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    a.button {
+      color: #111827;
+      background: #e5e7eb;
+      text-decoration: none;
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    a.button.secondary {
+      color: #e5e7eb;
+      background: #374151;
+    }
+    main {
+      padding: 18px;
+    }
+    .table-wrap {
+      overflow: auto;
+      max-height: calc(100vh - 120px);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      background: #111827;
+    }
+    table {
+      width: 100%;
+      min-width: 1700px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #1f2937;
+      color: #f9fafb;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid #4b5563;
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #1f2937;
+      vertical-align: top;
+      max-width: 360px;
+      overflow-wrap: anywhere;
+      line-height: 1.35;
+    }
+    tbody tr:hover {
+      background: #172033;
+    }
+    .empty {
+      padding: 24px;
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <h1>Rejected Users</h1>
+      <div class="meta">Rows shown: {{ROW_COUNT}} · Generated at: {{GENERATED_AT}}</div>
+    </div>
+    <nav class="actions">
+      <a class="button" href="{{DOWNLOAD_URL}}">Download CSV</a>
+      <a class="button secondary" href="{{LOGOUT_URL}}">Log out</a>
+    </nav>
+  </header>
+
+  <main>
+    {{EMPTY_STATE}}
+    <div class="table-wrap" style="{{TABLE_DISPLAY}}">
+      <table>
+        <thead>
+          <tr>{{TABLE_HEADER}}</tr>
+        </thead>
+        <tbody>
+          {{TABLE_ROWS}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>
