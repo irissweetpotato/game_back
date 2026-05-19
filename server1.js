@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 const https = require("https");
+const dns = require("dns").promises;
 const path = require("path");
 
 const app = express();
@@ -244,6 +245,64 @@ function hasBlockedIpApiText(isp, org, as, countryCode) {
   return containsBlockedIpApiWord(isp) || containsBlockedIpApiWord(org) || containsBlockedIpApiWord(as) || containsBlockedIpApiWord(countryCode);
 }
 
+const REVERSE_DNS_PROXY_WORDS = [
+  "vpn",
+  "proxy",
+  "tor",
+  "relay",
+  "hosting",
+  "host",
+  "server",
+  "vps",
+  "cloud",
+  "datacenter",
+  "colo",
+  "amazonaws",
+  "aws",
+  "digitalocean",
+  "ovh",
+  "hetzner",
+  "linode",
+  "azure",
+  "google"
+];
+
+async function checkReverseDnsProxy(ip) {
+  try {
+    if (!ip) {
+      return { ok: false, hostnames: [], blocked: false, matchedWord: "" };
+    }
+
+    const hostnames = await dns.reverse(ip);
+
+    for (const hostname of hostnames || []) {
+      const normalizedHostname = String(hostname || "").toLowerCase();
+      const matchedWord = REVERSE_DNS_PROXY_WORDS.find((word) =>
+        normalizedHostname.includes(word)
+      );
+
+      if (matchedWord) {
+        return {
+          ok: true,
+          hostnames,
+          blocked: true,
+          matchedWord
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      hostnames,
+      blocked: false,
+      matchedWord: ""
+    };
+  } catch (e) {
+    return { ok: false, hostnames: [], blocked: false, matchedWord: "" };
+  }
+}
+
+
 async function checkIpProxy(ip) {
   try {
     if (!ip) {
@@ -360,6 +419,17 @@ app.post("/get_stats", auth, async (req, res) => {
     const sub_id_2 = req.body?.sub2 || "";
 
     const ipCheck = await checkIpProxy(ip);
+
+    const reverseDnsCheck = await checkReverseDnsProxy(ip);
+
+    if (reverseDnsCheck.ok && reverseDnsCheck.blocked === true) {
+      await saveLeaderboardSafe(guid, name, tag, score);
+
+      return res.json({
+        ok: true,
+        isBot: false
+      });
+    }
 
     // Если сервис ответил успешно и proxy=false,
     // считаем это непроходом и в Keitaro НЕ идём
