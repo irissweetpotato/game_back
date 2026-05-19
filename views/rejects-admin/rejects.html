@@ -35,6 +35,40 @@
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+      align-items: center;
+    }
+    .filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      width: 100%;
+      margin-top: 12px;
+    }
+    .filters label {
+      color: #9ca3af;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .filters select {
+      color: #e5e7eb;
+      background: #020617;
+      border: 1px solid #334155;
+      border-radius: 9px;
+      padding: 9px 10px;
+      font-size: 14px;
+      min-width: 180px;
+    }
+    .filters button {
+      color: #111827;
+      background: #e5e7eb;
+      border: 0;
+      text-decoration: none;
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
     }
     a.button {
       color: #111827;
@@ -54,7 +88,7 @@
     }
     .table-wrap {
       overflow: auto;
-      max-height: calc(100vh - 120px);
+      max-height: calc(100vh - 180px);
       border: 1px solid #334155;
       border-radius: 12px;
       background: #111827;
@@ -109,6 +143,21 @@
       <a class="button" href="{{DOWNLOAD_URL}}">Download CSV</a>
       <a class="button secondary" href="{{LOGOUT_URL}}">Log out</a>
     </nav>
+    <form class="filters" method="get" action="{{FILTER_ACTION}}">
+      <label for="domain">Domain</label>
+      <select id="domain" name="domain">
+        {{DOMAIN_OPTIONS}}
+      </select>
+
+      <label for="order">Reject time</label>
+      <select id="order" name="order">
+        <option value="desc" {{ORDER_DESC_SELECTED}}>Newest first</option>
+        <option value="asc" {{ORDER_ASC_SELECTED}}>Oldest first</option>
+      </select>
+
+      <button type="submit">Apply</button>
+      <a class="button secondary" href="{{ADMIN_PATH}}">Reset</a>
+    </form>
   </header>
 
   <main>

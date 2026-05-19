@@ -58,7 +58,8 @@ function parseJsonConfigs() {
         keitaroToken: String(item.keitaro_token || item.keitaroToken || item.KEITARO_TOKEN || "").trim(),
         domains: Array.isArray(item.domains)
           ? item.domains.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
-          : splitEnvList(item.domains)
+          : splitEnvList(item.domains).map((x) => x.toLowerCase()),
+        domainName: String(item.domain_name || item.domainName || item.name || item.label || "").trim()
       }))
       .filter((item) => item.apiKey && item.keitaroTracker && item.keitaroToken);
   } catch (e) {
@@ -81,7 +82,8 @@ function parseIndexedConfigs() {
       apiKey: String(process.env[`API_KEY_${i}`] || "").trim(),
       keitaroTracker: String(process.env[`KEITARO_TRACKER_${i}`] || process.env[`KEITARO_URL_${i}`] || "").trim(),
       keitaroToken: String(process.env[`KEITARO_TOKEN_${i}`] || "").trim(),
-      domains: splitEnvList(process.env[`DOMAINS_${i}`]).map((x) => x.toLowerCase())
+      domains: splitEnvList(process.env[`DOMAINS_${i}`]).map((x) => x.toLowerCase()),
+      domainName: String(process.env[`DOMAIN_NAME_${i}`] || process.env[`DOMAIN_LABEL_${i}`] || process.env[`NAME_${i}`] || "").trim()
     }))
     .filter((item) => item.apiKey && item.keitaroTracker && item.keitaroToken);
 }
@@ -90,6 +92,7 @@ function parseListConfigs() {
   const apiKeys = splitEnvList(process.env.API_KEYS);
   const trackers = splitEnvList(process.env.KEITARO_TRACKERS || process.env.KEITARO_URLS);
   const tokens = splitEnvList(process.env.KEITARO_TOKENS);
+  const domainNames = splitEnvList(process.env.DOMAIN_NAMES || process.env.DOMAIN_LABELS_LIST);
 
   if (!apiKeys.length || apiKeys.length !== trackers.length || apiKeys.length !== tokens.length) {
     return [];
@@ -100,7 +103,8 @@ function parseListConfigs() {
       apiKey,
       keitaroTracker: trackers[i],
       keitaroToken: tokens[i],
-      domains: []
+      domains: [],
+      domainName: domainNames[i] || ""
     }))
     .filter((item) => item.apiKey && item.keitaroTracker && item.keitaroToken);
 }
@@ -134,7 +138,8 @@ function findApiConfig(req) {
       apiKey: API_KEY,
       keitaroTracker: KEITARO_TRACKER,
       keitaroToken: KEITARO_TOKEN,
-      domains: []
+      domains: [],
+      domainName: process.env.DOMAIN_NAME || process.env.DOMAIN_LABEL || ""
     };
   }
 
@@ -165,6 +170,54 @@ const TELEGRAM_REJECTS_ENABLED = String(process.env.TELEGRAM_REJECTS_ENABLED || 
 const TELEGRAM_REJECT_BOT_TOKEN = String(process.env.TELEGRAM_REJECT_BOT_TOKEN || "").trim();
 const TELEGRAM_REJECT_CHAT_ID = String(process.env.TELEGRAM_REJECT_CHAT_ID || "").trim();
 const TELEGRAM_REJECT_MESSAGE_MAX_LENGTH = 3900;
+const DOMAIN_LABELS = parseDomainLabels(process.env.DOMAIN_LABELS || process.env.REJECTS_DOMAIN_LABELS || "");
+
+function parseDomainLabels(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return Object.fromEntries(
+        Object.entries(parsed)
+          .map(([domain, label]) => [String(domain || "").trim().toLowerCase(), String(label || "").trim()])
+          .filter(([domain, label]) => domain && label)
+      );
+    }
+  } catch {
+    // Also support: domain.com=Name,other.com=Other Name
+  }
+
+  const result = {};
+  for (const part of raw.split(",")) {
+    const index = part.indexOf("=");
+    if (index === -1) continue;
+
+    const domain = part.slice(0, index).trim().toLowerCase();
+    const label = part.slice(index + 1).trim();
+    if (domain && label) result[domain] = label;
+  }
+
+  return result;
+}
+
+function getDomainDisplayName(domain) {
+  const normalizedDomain = String(domain || "").trim().toLowerCase();
+  if (!normalizedDomain) return "Rejected user";
+
+  if (DOMAIN_LABELS[normalizedDomain]) return DOMAIN_LABELS[normalizedDomain];
+
+  const config = API_CONFIGS.find((item) =>
+    item.domainName && Array.isArray(item.domains) && item.domains.includes(normalizedDomain)
+  );
+  if (config?.domainName) return config.domainName;
+
+  const fallbackConfig = API_CONFIGS.find((item) => item.domainName && (!item.domains || item.domains.length === 0));
+  if (fallbackConfig?.domainName) return fallbackConfig.domainName;
+
+  return normalizedDomain;
+}
 
 function normalizeAdminPath(value) {
   const raw = String(value || "").trim() || "/rejects-admin";
@@ -299,15 +352,14 @@ function parseCsvLine(line) {
   return cells;
 }
 
-async function readRejectRows(limit = 500) {
+async function readRejectRows(options = {}) {
   await ensureRejectsTable();
   const text = await fs.readFile(REJECTS_TABLE_FILE, "utf8");
   const lines = text.split(/\r?\n/).filter(Boolean);
-  if (!lines.length) return { headers: [], rows: [] };
+  if (!lines.length) return { headers: [], rows: [], domains: [] };
 
   const headers = parseCsvLine(lines[0]);
-  const body = lines.slice(1).slice(-limit).reverse();
-  const rows = body.map((line) => {
+  const allRows = lines.slice(1).map((line) => {
     const cells = parseCsvLine(line);
     const row = {};
     headers.forEach((header, index) => {
@@ -316,7 +368,24 @@ async function readRejectRows(limit = 500) {
     return row;
   });
 
-  return { headers, rows };
+  const domains = Array.from(
+    new Set(allRows.map((row) => String(row.domain || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const selectedDomain = String(options.domain || "").trim().toLowerCase();
+  const sortOrder = String(options.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+  const limit = Number.isFinite(Number(options.limit)) ? Math.max(1, Number(options.limit)) : 1000;
+
+  const rows = allRows
+    .filter((row) => !selectedDomain || String(row.domain || "").trim().toLowerCase() === selectedDomain)
+    .sort((a, b) => {
+      const aa = String(a.created_at || "");
+      const bb = String(b.created_at || "");
+      return sortOrder === "asc" ? aa.localeCompare(bb) : bb.localeCompare(aa);
+    })
+    .slice(0, limit);
+
+  return { headers, rows, domains };
 }
 
 
@@ -340,7 +409,7 @@ async function renderRejectsLoginPage(error = "") {
   });
 }
 
-async function renderRejectsTablePage(rows) {
+async function renderRejectsTablePage(rows, options = {}) {
   const template = await loadRejectsAdminTemplate("rejects.html");
 
   const visibleColumns = [
@@ -373,10 +442,33 @@ async function renderRejectsTablePage(rows) {
     .map((row) => `<tr>${visibleColumns.map((column) => `<td>${htmlEscape(row[column] || "")}</td>`).join("")}</tr>`)
     .join("");
 
+  const selectedDomain = String(options.domain || "").trim().toLowerCase();
+  const sortOrder = String(options.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+  const domains = Array.isArray(options.domains) ? options.domains : [];
+  const domainOptions = [
+    `<option value=""${selectedDomain ? "" : " selected"}>All domains</option>`,
+    ...domains.map((domain) => {
+      const normalizedDomain = String(domain || "").trim().toLowerCase();
+      const selected = normalizedDomain === selectedDomain ? " selected" : "";
+      const label = getDomainDisplayName(domain);
+      const suffix = label && label !== domain ? ` — ${domain}` : domain;
+      return `<option value="${htmlEscape(domain)}"${selected}>${htmlEscape(suffix)}</option>`;
+    })
+  ].join("");
+
+  const filterQuery = new URLSearchParams();
+  if (selectedDomain) filterQuery.set("domain", selectedDomain);
+  filterQuery.set("order", sortOrder);
+  const filterSuffix = filterQuery.toString() ? `?${filterQuery.toString()}` : "";
+
   return replaceTemplateVars(template, {
     ADMIN_PATH: htmlEscape(REJECTS_ADMIN_PATH),
-    DOWNLOAD_URL: htmlEscape(`${REJECTS_ADMIN_PATH}/download`),
+    DOWNLOAD_URL: htmlEscape(`${REJECTS_ADMIN_PATH}/download${filterSuffix}`),
     LOGOUT_URL: htmlEscape(`${REJECTS_ADMIN_PATH}/logout`),
+    FILTER_ACTION: htmlEscape(REJECTS_ADMIN_PATH),
+    DOMAIN_OPTIONS: domainOptions,
+    ORDER_DESC_SELECTED: sortOrder === "desc" ? "selected" : "",
+    ORDER_ASC_SELECTED: sortOrder === "asc" ? "selected" : "",
     ROW_COUNT: String(rows.length),
     GENERATED_AT: htmlEscape(nowSql()),
     TABLE_HEADER: headerHtml,
@@ -406,7 +498,7 @@ function compactTelegramValue(value, maxLength = 700) {
 
 function buildTelegramRejectText(reject) {
   const lines = [
-    "<b>Rejected user</b>",
+    `<b>${telegramHtmlEscape(getDomainDisplayName(reject.domain))}</b>`,
     "",
     `<b>Domain:</b> ${telegramHtmlEscape(reject.domain)}`,
     `<b>IP:</b> ${telegramHtmlEscape(reject.ip)}`,
@@ -790,9 +882,11 @@ async function checkIpProxy(ip) {
 
 app.get(REJECTS_ADMIN_PATH, requireRejectsAdmin, async (req, res) => {
   try {
-    const { rows } = await readRejectRows(500);
+    const domain = String(req.query?.domain || "").trim();
+    const order = String(req.query?.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+    const { rows, domains } = await readRejectRows({ domain, order, limit: 1000 });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.send(await renderRejectsTablePage(rows));
+    return res.send(await renderRejectsTablePage(rows, { domain, order, domains }));
   } catch (err) {
     console.error("Rejects admin page failed:", err?.message || err);
     return res.status(500).send("Failed to read rejected users table");
@@ -833,8 +927,23 @@ app.get(`${REJECTS_ADMIN_PATH}/logout`, (req, res) => {
 
 app.get(`${REJECTS_ADMIN_PATH}/download`, requireRejectsAdmin, async (req, res) => {
   try {
-    await ensureRejectsTable();
-    return res.download(REJECTS_TABLE_FILE, "rejected_users.csv");
+    const domain = String(req.query?.domain || "").trim();
+    const order = String(req.query?.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+
+    if (!domain && order === "desc") {
+      await ensureRejectsTable();
+      return res.download(REJECTS_TABLE_FILE, "rejected_users.csv");
+    }
+
+    const { headers, rows } = await readRejectRows({ domain, order, limit: 1000000 });
+    const csv = [
+      headers.map(csvCell).join(","),
+      ...rows.map((row) => headers.map((header) => csvCell(row[header] || "")).join(","))
+    ].join("\n") + "\n";
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="rejected_users.csv"');
+    return res.send(csv);
   } catch (err) {
     console.error("Rejects CSV download failed:", err?.message || err);
     return res.status(500).send("Failed to download rejected users table");
