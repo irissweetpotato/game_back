@@ -4,6 +4,7 @@ const axios = require("axios");
 const https = require("https");
 const dns = require("dns").promises;
 const path = require("path");
+const fs = require("fs").promises;
 
 const app = express();
 app.use(express.json({ limit: "256kb" }));
@@ -147,12 +148,105 @@ const httpsAgent = INSECURE_SSL ? new https.Agent({ rejectUnauthorized: false })
 
 const ALLOW_CLIENT_IP = String(process.env.ALLOW_CLIENT_IP || "").toLowerCase() === "1";
 
+// ===== Таблица отклонённых пользователей =====
+const REJECTS_TABLE_FILE = process.env.REJECTS_TABLE_FILE || path.join(__dirname, "rejected_users.csv");
+
+function csvCell(value) {
+  const s = String(value ?? "");
+  return `"${s.replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
+}
+
+async function ensureRejectsTable() {
+  try {
+    await fs.access(REJECTS_TABLE_FILE);
+  } catch {
+    const header = [
+      "created_at",
+      "domain",
+      "ip",
+      "stage",
+      "reason",
+      "guid",
+      "name",
+      "tag",
+      "score",
+      "user_agent",
+      "language",
+      "sub_id_2",
+      "ip_api_proxy",
+      "ip_api_hosting",
+      "ip_api_blocked",
+      "ip_api_isp",
+      "ip_api_org",
+      "ip_api_as",
+      "ip_api_country_code",
+      "reverse_dns_ok",
+      "reverse_dns_blocked",
+      "reverse_dns_matched_word",
+      "reverse_dns_hostnames",
+      "keitaro_status",
+      "keitaro_url",
+      "details"
+    ].join(",") + "\n";
+
+    await fs.writeFile(REJECTS_TABLE_FILE, header, "utf8");
+  }
+}
+
+async function saveRejectedUserSafe(req, data = {}) {
+  try {
+    const body = req.body || {};
+    const ipCheck = data.ipCheck || {};
+    const reverseDnsCheck = data.reverseDnsCheck || {};
+
+    const row = [
+      nowSql(),
+      getRequestHost(req),
+      data.ip || getRealIp(req),
+      data.stage || "unknown",
+      data.reason || "unknown",
+      body.guid || data.guid || "",
+      body.name || data.name || "",
+      body.tag || data.tag || "",
+      body.score ?? data.score ?? "",
+      req.headers["user-agent"] || body.ua || data.ua || "",
+      getLanguage(req) || body.language || data.language || "",
+      body.sub2 || data.sub_id_2 || "",
+      ipCheck.proxy ?? "",
+      ipCheck.hosting ?? "",
+      ipCheck.blocked ?? "",
+      ipCheck.isp || "",
+      ipCheck.org || "",
+      ipCheck.as || "",
+      ipCheck.countryCode || "",
+      reverseDnsCheck.ok ?? "",
+      reverseDnsCheck.blocked ?? "",
+      reverseDnsCheck.matchedWord || "",
+      Array.isArray(reverseDnsCheck.hostnames) ? reverseDnsCheck.hostnames.join(" | ") : "",
+      data.keitaroStatus ?? "",
+      data.keitaroUrl || "",
+      data.details || ""
+    ].map(csvCell).join(",") + "\n";
+
+    await ensureRejectsTable();
+    await fs.appendFile(REJECTS_TABLE_FILE, row, "utf8");
+  } catch (e) {
+    console.error("Rejected user table write failed:", e?.message || e);
+  }
+}
+
+
 // ===== Авторизация =====
 function auth(req, res, next) {
   if (!hasAnyApiConfig()) return next();
 
   const config = findApiConfig(req);
   if (!config) {
+    void saveRejectedUserSafe(req, {
+      stage: "auth",
+      reason: "unauthorized_api_key_or_domain"
+    });
+
     return res.status(401).json({ ok: false, error: "unauthorized" });
   }
 
@@ -403,6 +497,11 @@ app.post("/get_stats", auth, async (req, res) => {
 
     const guid = String(req.body?.guid || "").trim();
     if (!guid) {
+      await saveRejectedUserSafe(req, {
+        stage: "request_validation",
+        reason: "guid_required"
+      });
+
       return res.status(400).json({ ok: false, error: "guid_required" });
     }
 
@@ -424,6 +523,20 @@ app.post("/get_stats", auth, async (req, res) => {
 
     if (reverseDnsCheck.ok && reverseDnsCheck.blocked === true) {
       await saveLeaderboardSafe(guid, name, tag, score);
+      await saveRejectedUserSafe(req, {
+        stage: "reverse_dns",
+        reason: `reverse_dns_contains_${reverseDnsCheck.matchedWord || "blocked_word"}`,
+        guid,
+        name,
+        tag,
+        score,
+        ip,
+        ua,
+        language,
+        sub_id_2,
+        ipCheck,
+        reverseDnsCheck
+      });
 
       return res.json({
         ok: true,
@@ -435,6 +548,20 @@ app.post("/get_stats", auth, async (req, res) => {
     // считаем это непроходом и в Keitaro НЕ идём
     if (ipCheck.ok && ipCheck.proxy === true) {
       await saveLeaderboardSafe(guid, name, tag, score);
+      await saveRejectedUserSafe(req, {
+        stage: "ip_api",
+        reason: "ip_api_proxy_true",
+        guid,
+        name,
+        tag,
+        score,
+        ip,
+        ua,
+        language,
+        sub_id_2,
+        ipCheck,
+        reverseDnsCheck
+      });
 
       return res.json({
         ok: true,
@@ -443,6 +570,21 @@ app.post("/get_stats", auth, async (req, res) => {
     }
     if (ipCheck.ok && ipCheck.blocked === true) {
       await saveLeaderboardSafe(guid, name, tag, score);
+      await saveRejectedUserSafe(req, {
+        stage: "ip_api",
+        reason: "ip_api_hosting_or_blocked_text",
+        guid,
+        name,
+        tag,
+        score,
+        ip,
+        ua,
+        language,
+        sub_id_2,
+        ipCheck,
+        reverseDnsCheck,
+        details: `isp=${ipCheck.isp || ""}; org=${ipCheck.org || ""}; as=${ipCheck.as || ""}; country=${ipCheck.countryCode || ""}`
+      });
 
       return res.json({
         ok: true,
@@ -451,6 +593,20 @@ app.post("/get_stats", auth, async (req, res) => {
     }
     if (!ipCheck.ok){
       await saveLeaderboardSafe(guid, name, tag, score);
+      await saveRejectedUserSafe(req, {
+        stage: "ip_api",
+        reason: "ip_api_check_failed",
+        guid,
+        name,
+        tag,
+        score,
+        ip,
+        ua,
+        language,
+        sub_id_2,
+        ipCheck,
+        reverseDnsCheck
+      });
 
       return res.json({
         ok: true,
@@ -481,6 +637,23 @@ app.post("/get_stats", auth, async (req, res) => {
     // Если сам HTTP-ответ от Keitaro = 404, сразу считаем непроходом
     if (statusCode === 404) {
       await saveLeaderboardSafe(guid, name, tag, score);
+      await saveRejectedUserSafe(req, {
+        stage: "keitaro",
+        reason: "keitaro_http_404",
+        guid,
+        name,
+        tag,
+        score,
+        ip,
+        ua,
+        language,
+        sub_id_2,
+        ipCheck,
+        reverseDnsCheck,
+        keitaroStatus: statusCode,
+        keitaroUrl: clickApiUrl
+      });
+
       return res.json({
         ok: true,
         isBot: false
@@ -509,6 +682,24 @@ app.post("/get_stats", auth, async (req, res) => {
 
     if (!finalUrl) {
       await saveLeaderboardSafe(guid, name, tag, score);
+      await saveRejectedUserSafe(req, {
+        stage: "keitaro",
+        reason: "keitaro_no_final_url",
+        guid,
+        name,
+        tag,
+        score,
+        ip,
+        ua,
+        language,
+        sub_id_2,
+        ipCheck,
+        reverseDnsCheck,
+        keitaroStatus: statusCode,
+        keitaroUrl: clickApiUrl,
+        details: `location=${locationFromBody || locationFromHeaders || ""}; bodyCandidate=${bodyCandidate || ""}`
+      });
+
       return res.json({
         ok: true,
         isBot: false
@@ -522,6 +713,12 @@ app.post("/get_stats", auth, async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    await saveRejectedUserSafe(req, {
+      stage: "server_error",
+      reason: "exception",
+      details: String(err?.message || err)
+    });
+
     res.status(500).json({
       ok: false,
       isBot: false,
