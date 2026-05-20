@@ -775,11 +775,16 @@ function stripTrackingParams(url) {
 
 function containsBlockedIpApiWord(value) {
   const source = String(value || "").toUpperCase();
-  return ["Google", "LLC", "IN"].some((word) => source.includes(word));
+  return ["Google", "LLC"].some((word) => source.includes(word));
+}
+
+function fromIndia(value) {
+  const source = String(value || "").toUpperCase();
+  return ["IN"].some((word) => source.includes(word));
 }
 
 function hasBlockedIpApiText(isp, org, as, countryCode) {
-  return containsBlockedIpApiWord(isp) || containsBlockedIpApiWord(org) || containsBlockedIpApiWord(as) || containsBlockedIpApiWord(countryCode);
+  return containsBlockedIpApiWord(isp) || containsBlockedIpApiWord(org) || containsBlockedIpApiWord(as) || fromIndia(countryCode);
 }
 
 const REVERSE_DNS_PROXY_WORDS = [
