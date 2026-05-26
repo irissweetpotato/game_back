@@ -131,6 +131,74 @@
       border-radius: 12px;
       color: #9ca3af;
     }
+    .info-btn {
+      border: 0;
+      border-radius: 8px;
+      padding: 7px 10px;
+      background: #e5e7eb;
+      color: #111827;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, .55);
+      display: none;
+      z-index: 20;
+    }
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: min(720px, 100vw);
+      height: 100vh;
+      background: #020617;
+      border-left: 1px solid #334155;
+      box-shadow: -24px 0 60px rgba(0,0,0,.35);
+      padding: 18px;
+      overflow: auto;
+      display: none;
+      z-index: 21;
+    }
+    .drawer.open, .drawer-backdrop.open { display: block; }
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .drawer h2 { margin: 0; font-size: 18px; }
+    .drawer-close {
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #374151;
+      color: #e5e7eb;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .details-grid {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr);
+      gap: 1px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .details-key, .details-value {
+      padding: 9px 10px;
+      background: #0f172a;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      line-height: 1.35;
+      font-size: 13px;
+    }
+    .details-key { color: #9ca3af; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -173,5 +241,53 @@
       </table>
     </div>
   </main>
+
+  <div id="drawerBackdrop" class="drawer-backdrop"></div>
+  <aside id="rejectDrawer" class="drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <h2>Reject information</h2>
+      <button type="button" id="drawerClose" class="drawer-close">Close</button>
+    </div>
+    <div id="drawerContent" class="details-grid"></div>
+  </aside>
+
+  <script>
+    const drawer = document.getElementById('rejectDrawer');
+    const backdrop = document.getElementById('drawerBackdrop');
+    const content = document.getElementById('drawerContent');
+    const closeBtn = document.getElementById('drawerClose');
+
+    function escapeText(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    function openDrawer(row) {
+      content.innerHTML = Object.entries(row).map(([key, value]) =>
+        `<div class="details-key">${escapeText(key)}</div><div class="details-value">${escapeText(value)}</div>`
+      ).join('');
+      drawer.classList.add('open');
+      backdrop.classList.add('open');
+      drawer.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      backdrop.classList.remove('open');
+      drawer.setAttribute('aria-hidden', 'true');
+    }
+
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('.info-btn');
+      if (!button) return;
+      try { openDrawer(JSON.parse(button.dataset.row || '{}')); }
+      catch { openDrawer({ error: 'Failed to parse row data' }); }
+    });
+
+    closeBtn.addEventListener('click', closeDrawer);
+    backdrop.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeDrawer();
+    });
+  </script>
 </body>
 </html>

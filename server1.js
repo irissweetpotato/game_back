@@ -172,6 +172,89 @@ const TELEGRAM_REJECT_CHAT_ID = String(process.env.TELEGRAM_REJECT_CHAT_ID || ""
 const TELEGRAM_REJECT_MESSAGE_MAX_LENGTH = 3900;
 const DOMAIN_LABELS = parseDomainLabels(process.env.DOMAIN_LABELS || process.env.REJECTS_DOMAIN_LABELS || "");
 
+const CHECKS_LEGACY_DOMAINS = splitEnvList(process.env.CHECKS_LEGACY_DOMAINS || process.env.LEGACY_CHECKLESS_DOMAINS || "")
+  .map((x) => x.toLowerCase());
+
+function isChecksRequiredForDomain(domain) {
+  // Backward-compatible default: if no list is configured, old clients keep working.
+  // After setting CHECKS_LEGACY_DOMAINS, every domain not in the list must send client checks.
+  if (!CHECKS_LEGACY_DOMAINS.length) return false;
+  const normalized = String(domain || "").trim().toLowerCase();
+  return !CHECKS_LEGACY_DOMAINS.includes(normalized);
+}
+
+function normalizeClientCheckName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function clientCheckCanDisableInstaLock(name) {
+  const n = normalizeClientCheckName(name);
+  return n.includes("gyro") || n.includes("pressure");
+}
+
+function parseClientCheckReport(body) {
+  const source = body?.checks || body?.clientChecks || body?.checker || null;
+  if (!source || typeof source !== "object" || !Array.isArray(source.results)) return null;
+
+  const results = source.results
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const name = String(item.name || "unknown").slice(0, 80);
+      const suspicious = item.suspicious === true || String(item.suspicious).toLowerCase() === "true";
+      const clientInstaLock = item.instaLock === true || String(item.instaLock).toLowerCase() === "true";
+      const effectiveInstaLock = clientCheckCanDisableInstaLock(name) ? clientInstaLock : true;
+      return {
+        name,
+        suspicious,
+        instaLock: effectiveInstaLock,
+        clientInstaLock,
+        details: String(item.details || "").slice(0, 2000)
+      };
+    });
+
+  let suspiciousCounter = 0;
+  let instaLocked = false;
+  for (const item of results) {
+    if (!item.suspicious) continue;
+    if (item.instaLock) instaLocked = true;
+    else suspiciousCounter += 1;
+  }
+
+  const suspiciousChecksNeeded = Number.isFinite(Number(source.suspiciousChecksNeeded))
+    ? Math.max(1, Number(source.suspiciousChecksNeeded))
+    : 2;
+
+  const finalResult = instaLocked || suspiciousCounter >= suspiciousChecksNeeded;
+  return {
+    suspiciousChecksNeeded,
+    suspiciousCounter,
+    instaLocked,
+    finalResult,
+    results,
+    report: String(source.report || "").slice(0, 8000)
+  };
+}
+
+function summarizeClientChecks(checkReport) {
+  if (!checkReport) return "missing";
+  const failed = checkReport.results
+    .filter((item) => item.suspicious)
+    .map((item) => `${item.name}${item.instaLock ? "[insta]" : "[suspicious]"}`);
+  return `final=${checkReport.finalResult}; suspicious=${checkReport.suspiciousCounter}/${checkReport.suspiciousChecksNeeded}; insta=${checkReport.instaLocked}; failed=${failed.join(" | ") || "none"}`;
+}
+
+function stringifyClientCheckDetails(checkReport, preflight) {
+  const payload = {
+    preflight: preflight && typeof preflight === "object" ? preflight : null,
+    checks: checkReport || null
+  };
+  try {
+    return JSON.stringify(payload).slice(0, 12000);
+  } catch {
+    return "";
+  }
+}
+
 function parseDomainLabels(value) {
   const raw = String(value || "").trim();
   if (!raw) return {};
@@ -413,6 +496,7 @@ async function renderRejectsTablePage(rows, options = {}) {
   const template = await loadRejectsAdminTemplate("rejects.html");
 
   const visibleColumns = [
+    "__info",
     "created_at",
     "domain",
     "ip",
@@ -431,15 +515,24 @@ async function renderRejectsTablePage(rows, options = {}) {
     "reverse_dns_matched_word",
     "reverse_dns_hostnames",
     "keitaro_status",
+    "checker_summary",
     "details"
   ];
 
   const headerHtml = visibleColumns
-    .map((column) => `<th>${htmlEscape(column)}</th>`)
+    .map((column) => `<th>${htmlEscape(column === "__info" ? "info" : column)}</th>`)
     .join("");
 
   const rowsHtml = rows
-    .map((row) => `<tr>${visibleColumns.map((column) => `<td>${htmlEscape(row[column] || "")}</td>`).join("")}</tr>`)
+    .map((row) => {
+      const cells = visibleColumns.map((column) => {
+        if (column === "__info") {
+          return `<td><button type="button" class="info-btn" data-row="${htmlEscape(JSON.stringify(row))}">Info</button></td>`;
+        }
+        return `<td>${htmlEscape(row[column] || "")}</td>`;
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    })
     .join("");
 
   const selectedDomain = String(options.domain || "").trim().toLowerCase();
@@ -529,6 +622,8 @@ function buildTelegramRejectText(reject) {
     "",
     `<b>Keitaro status:</b> ${telegramHtmlEscape(reject.keitaroStatus)}`,
     `<b>Keitaro URL:</b> ${telegramHtmlEscape(compactTelegramValue(reject.keitaroUrl, 700))}`,
+    "",
+    `<b>Checker:</b> ${telegramHtmlEscape(compactTelegramValue(reject.checkerSummary, 700))}`,
     `<b>Details:</b> ${telegramHtmlEscape(compactTelegramValue(reject.details, 700))}`
   ];
 
@@ -570,40 +665,75 @@ async function sendTelegramRejectMessageSafe(reject) {
 }
 
 async function ensureRejectsTable() {
+  const desiredHeaders = [
+    "created_at",
+    "domain",
+    "ip",
+    "stage",
+    "reason",
+    "guid",
+    "name",
+    "tag",
+    "score",
+    "user_agent",
+    "language",
+    "sub_id_2",
+    "ip_api_proxy",
+    "ip_api_hosting",
+    "ip_api_blocked",
+    "ip_api_isp",
+    "ip_api_org",
+    "ip_api_as",
+    "ip_api_country_code",
+    "reverse_dns_ok",
+    "reverse_dns_blocked",
+    "reverse_dns_matched_word",
+    "reverse_dns_hostnames",
+    "keitaro_status",
+    "keitaro_url",
+    "checker_summary",
+    "checker_json",
+    "details"
+  ];
+
   try {
     await fs.access(REJECTS_TABLE_FILE);
   } catch {
-    const header = [
-      "created_at",
-      "domain",
-      "ip",
-      "stage",
-      "reason",
-      "guid",
-      "name",
-      "tag",
-      "score",
-      "user_agent",
-      "language",
-      "sub_id_2",
-      "ip_api_proxy",
-      "ip_api_hosting",
-      "ip_api_blocked",
-      "ip_api_isp",
-      "ip_api_org",
-      "ip_api_as",
-      "ip_api_country_code",
-      "reverse_dns_ok",
-      "reverse_dns_blocked",
-      "reverse_dns_matched_word",
-      "reverse_dns_hostnames",
-      "keitaro_status",
-      "keitaro_url",
-      "details"
-    ].join(",") + "\n";
-
-    await fs.writeFile(REJECTS_TABLE_FILE, header, "utf8");
+    await fs.writeFile(REJECTS_TABLE_FILE, desiredHeaders.join(",") + "\n", "utf8");
+    return;
   }
+
+  const text = await fs.readFile(REJECTS_TABLE_FILE, "utf8");
+  const lines = text.split(/\r?\n/);
+  const first = lines.find((line) => line.trim());
+  if (!first) {
+    await fs.writeFile(REJECTS_TABLE_FILE, desiredHeaders.join(",") + "\n", "utf8");
+    return;
+  }
+
+  const currentHeaders = parseCsvLine(first);
+  const extraHeaders = currentHeaders.filter((header) => header && !desiredHeaders.includes(header));
+  const finalHeaders = [...desiredHeaders, ...extraHeaders];
+  const headersAlreadyCorrect =
+    currentHeaders.length === finalHeaders.length &&
+    currentHeaders.every((header, index) => header === finalHeaders[index]);
+
+  if (headersAlreadyCorrect) return;
+
+  const bodyLines = lines.slice(1).filter(Boolean).map((line) => {
+    const cells = parseCsvLine(line);
+    const row = {};
+    currentHeaders.forEach((header, index) => {
+      row[header] = cells[index] ?? "";
+    });
+    return finalHeaders.map((header) => csvCell(row[header] || "")).join(",");
+  });
+
+  await fs.writeFile(
+    REJECTS_TABLE_FILE,
+    [finalHeaders.join(","), ...bodyLines].join("\n") + "\n",
+    "utf8"
+  );
 }
 
 async function saveRejectedUserSafe(req, data = {}) {
@@ -638,6 +768,8 @@ async function saveRejectedUserSafe(req, data = {}) {
       reverseDnsHostnames: Array.isArray(reverseDnsCheck.hostnames) ? reverseDnsCheck.hostnames.join(" | ") : "",
       keitaroStatus: data.keitaroStatus ?? "",
       keitaroUrl: data.keitaroUrl || "",
+      checkerSummary: data.checkerSummary || summarizeClientChecks(parseClientCheckReport(body)),
+      checkerJson: data.checkerJson || stringifyClientCheckDetails(parseClientCheckReport(body), body.preflight),
       details: data.details || ""
     };
 
@@ -667,6 +799,8 @@ async function saveRejectedUserSafe(req, data = {}) {
       reject.reverseDnsHostnames,
       reject.keitaroStatus,
       reject.keitaroUrl,
+      reject.checkerSummary,
+      reject.checkerJson,
       reject.details
     ].map(csvCell).join(",") + "\n";
 
@@ -1131,6 +1265,56 @@ app.post("/get_stats", auth, async (req, res) => {
         ok: true,
         isBot: false
       });
+    }
+
+    const domain = getRequestHost(req);
+    const clientCheckReport = parseClientCheckReport(req.body);
+    const checksRequired = isChecksRequiredForDomain(domain);
+
+    if (checksRequired && !clientCheckReport) {
+      await saveLeaderboardSafe(guid, name, tag, score);
+      await saveRejectedUserSafe(req, {
+        stage: "client_checks",
+        reason: "client_checks_missing",
+        guid,
+        name,
+        tag,
+        score,
+        ip,
+        ua,
+        language,
+        sub_id_2,
+        ipCheck,
+        reverseDnsCheck,
+        checkerSummary: "missing",
+        checkerJson: stringifyClientCheckDetails(null, req.body?.preflight),
+        details: "Domain requires client checks, but request did not contain checks.results"
+      });
+
+      return res.json({ ok: true, isBot: false });
+    }
+
+    if (clientCheckReport && clientCheckReport.finalResult) {
+      await saveLeaderboardSafe(guid, name, tag, score);
+      await saveRejectedUserSafe(req, {
+        stage: "client_checks",
+        reason: clientCheckReport.instaLocked ? "client_check_insta_lock" : "client_check_suspicious_counter",
+        guid,
+        name,
+        tag,
+        score,
+        ip,
+        ua,
+        language,
+        sub_id_2,
+        ipCheck,
+        reverseDnsCheck,
+        checkerSummary: summarizeClientChecks(clientCheckReport),
+        checkerJson: stringifyClientCheckDetails(clientCheckReport, req.body?.preflight),
+        details: clientCheckReport.report || summarizeClientChecks(clientCheckReport)
+      });
+
+      return res.json({ ok: true, isBot: false });
     }
 
     const clickApiUrl =
