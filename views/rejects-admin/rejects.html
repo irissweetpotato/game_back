@@ -50,7 +50,7 @@
       font-size: 13px;
       font-weight: 700;
     }
-    .filters select {
+    .filters select, .filters input {
       color: #e5e7eb;
       background: #020617;
       border: 1px solid #334155;
@@ -58,6 +58,24 @@
       padding: 9px 10px;
       font-size: 14px;
       min-width: 180px;
+    }
+    .filters input.wide { min-width: 280px; }
+    .filters select[multiple] {
+      min-width: 240px;
+      min-height: 118px;
+      padding: 7px 9px;
+    }
+    .filter-group {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .filter-help {
+      width: 100%;
+      color: #64748b;
+      font-size: 12px;
+      margin-top: -4px;
     }
     .filters button {
       color: #111827;
@@ -199,6 +217,23 @@
       font-size: 13px;
     }
     .details-key { color: #9ca3af; font-weight: 700; }
+    .json-tree {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+    }
+    .json-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 210px) minmax(0, 1fr);
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .json-row:last-child { border-bottom: 0; }
+    .json-path { color: #93c5fd; font-weight: 700; }
+    .json-value { color: #e5e7eb; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .json-muted { color: #94a3b8; }
   </style>
 </head>
 <body>
@@ -222,6 +257,38 @@
         <option value="desc" {{ORDER_DESC_SELECTED}}>Newest first</option>
         <option value="asc" {{ORDER_ASC_SELECTED}}>Oldest first</option>
       </select>
+
+      <label for="ip">IP contains</label>
+      <input id="ip" name="ip" value="{{FILTER_IP}}" placeholder="1.2.3.4 or 1.2" autocomplete="off">
+
+      <label for="hideIp">Hide IP</label>
+      <input id="hideIp" name="hideIp" value="{{FILTER_HIDE_IP}}" placeholder="comma separated" autocomplete="off">
+
+      <label for="userAgent">User-agent contains</label>
+      <input id="userAgent" class="wide" name="userAgent" value="{{FILTER_UA}}" placeholder="Chrome, Android, bot..." autocomplete="off">
+
+      <label for="hideUserAgent">Hide UA</label>
+      <input id="hideUserAgent" class="wide" name="hideUserAgent" value="{{FILTER_HIDE_UA}}" placeholder="comma separated" autocomplete="off">
+
+      <label for="device">Device</label>
+      <select id="device" name="device">
+        {{DEVICE_OPTIONS}}
+      </select>
+
+      <label for="hideDevice">Hide device</label>
+      <input id="hideDevice" name="hideDevice" value="{{FILTER_HIDE_DEVICE}}" placeholder="mobile, bot..." autocomplete="off">
+
+      <label for="clientChecks">Client checks contains</label>
+      <input id="clientChecks" class="wide" name="clientChecks" value="{{FILTER_CHECKS}}" placeholder="failed, webdriver, timezone..." autocomplete="off">
+
+      <label for="hideClientChecks">Hide checks</label>
+      <input id="hideClientChecks" class="wide" name="hideClientChecks" value="{{FILTER_HIDE_CHECKS}}" placeholder="comma separated" autocomplete="off">
+
+      <label for="columns">Columns</label>
+      <select id="columns" name="columns" multiple>
+        {{COLUMN_OPTIONS}}
+      </select>
+      <div class="filter-help">For IP, UA, device and client checks you can enter several values separated by comma, semicolon or new line. “Hide” excludes matching rows. Hold Ctrl/⌘ to select columns.</div>
 
       <button type="submit">Apply</button>
       <a class="button secondary" href="{{ADMIN_PATH}}">Reset</a>
@@ -261,9 +328,45 @@
       return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     }
 
+    function tryParseJson(value) {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      if (!trimmed || !['{', '['].includes(trimmed[0])) return null;
+      try { return JSON.parse(trimmed); } catch { return null; }
+    }
+
+    function flattenJson(value, path = '') {
+      if (value === null || typeof value !== 'object') {
+        return [{ path: path || 'value', value }];
+      }
+
+      if (Array.isArray(value)) {
+        if (!value.length) return [{ path: path || 'value', value: '[]' }];
+        return value.flatMap((item, index) => flattenJson(item, `${path}[${index}]`));
+      }
+
+      const entries = Object.entries(value);
+      if (!entries.length) return [{ path: path || 'value', value: '{}' }];
+      return entries.flatMap(([key, item]) => flattenJson(item, path ? `${path}.${key}` : key));
+    }
+
+    function renderValue(value) {
+      const parsed = tryParseJson(value);
+      if (!parsed) return escapeText(value);
+
+      const rows = flattenJson(parsed).map((item) => {
+        const displayValue = typeof item.value === 'object'
+          ? JSON.stringify(item.value, null, 2)
+          : String(item.value ?? '');
+        return `<div class="json-row"><div class="json-path">${escapeText(item.path)}</div><div class="json-value">${escapeText(displayValue)}</div></div>`;
+      }).join('');
+
+      return `<div class="json-tree">${rows || '<span class="json-muted">empty JSON</span>'}</div>`;
+    }
+
     function openDrawer(row) {
       content.innerHTML = Object.entries(row).map(([key, value]) =>
-        `<div class="details-key">${escapeText(key)}</div><div class="details-value">${escapeText(value)}</div>`
+        `<div class="details-key">${escapeText(key)}</div><div class="details-value">${renderValue(value)}</div>`
       ).join('');
       drawer.classList.add('open');
       backdrop.classList.add('open');

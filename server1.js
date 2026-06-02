@@ -435,6 +435,35 @@ function parseCsvLine(line) {
   return cells;
 }
 
+function normalizeFilterText(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function splitFilterValues(value) {
+  return String(value ?? "")
+    .split(/[\n,;]+/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function valueMatchesAny(value, needles) {
+  const haystack = normalizeFilterText(value);
+  return needles.length > 0 && needles.some((needle) => haystack.includes(needle));
+}
+
+function detectDeviceFromUserAgent(userAgent = "") {
+  const ua = String(userAgent || "").toLowerCase();
+  if (!ua) return "unknown";
+  if (/bot|crawler|spider|headless|phantom|selenium|playwright|puppeteer/.test(ua)) return "bot";
+  if (/ipad|tablet|kindle|silk|playbook|nexus 7|nexus 9/.test(ua)) return "tablet";
+  if (/mobi|android|iphone|ipod|blackberry|iemobile|opera mini/.test(ua)) return "mobile";
+  return "desktop";
+}
+
+function getCheckerSearchText(row) {
+  return [row.checker_summary, row.checker_json, row.details].map((value) => String(value || "")).join(" ");
+}
+
 async function readRejectRows(options = {}) {
   await ensureRejectsTable();
   const text = await fs.readFile(REJECTS_TABLE_FILE, "utf8");
@@ -448,6 +477,7 @@ async function readRejectRows(options = {}) {
     headers.forEach((header, index) => {
       row[header] = cells[index] ?? "";
     });
+    row.device = detectDeviceFromUserAgent(row.user_agent);
     return row;
   });
 
@@ -459,8 +489,25 @@ async function readRejectRows(options = {}) {
   const sortOrder = String(options.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
   const limit = Number.isFinite(Number(options.limit)) ? Math.max(1, Number(options.limit)) : 1000;
 
+  const ipIncludes = splitFilterValues(options.ip);
+  const ipExcludes = splitFilterValues(options.hideIp);
+  const uaIncludes = splitFilterValues(options.userAgent);
+  const uaExcludes = splitFilterValues(options.hideUserAgent);
+  const checkerIncludes = splitFilterValues(options.clientChecks);
+  const checkerExcludes = splitFilterValues(options.hideClientChecks);
+  const selectedDevice = normalizeFilterText(options.device);
+  const hiddenDevices = splitFilterValues(options.hideDevice);
+
   const rows = allRows
     .filter((row) => !selectedDomain || String(row.domain || "").trim().toLowerCase() === selectedDomain)
+    .filter((row) => !selectedDevice || String(row.device || "").toLowerCase() === selectedDevice)
+    .filter((row) => hiddenDevices.length === 0 || !hiddenDevices.includes(String(row.device || "").toLowerCase()))
+    .filter((row) => ipIncludes.length === 0 || valueMatchesAny(row.ip, ipIncludes))
+    .filter((row) => !valueMatchesAny(row.ip, ipExcludes))
+    .filter((row) => uaIncludes.length === 0 || valueMatchesAny(row.user_agent, uaIncludes))
+    .filter((row) => !valueMatchesAny(row.user_agent, uaExcludes))
+    .filter((row) => checkerIncludes.length === 0 || valueMatchesAny(getCheckerSearchText(row), checkerIncludes))
+    .filter((row) => !valueMatchesAny(getCheckerSearchText(row), checkerExcludes))
     .sort((a, b) => {
       const aa = String(a.created_at || "");
       const bb = String(b.created_at || "");
@@ -492,14 +539,56 @@ async function renderRejectsLoginPage(error = "") {
   });
 }
 
+function csvQueryValue(value) {
+  return String(value ?? "").trim();
+}
+
+function selectedAttr(current, value) {
+  return String(current || "") === String(value || "") ? " selected" : "";
+}
+
 async function renderRejectsTablePage(rows, options = {}) {
   const template = await loadRejectsAdminTemplate("rejects.html");
 
-  const visibleColumns = [
+  const allColumns = [
     "__info",
     "created_at",
     "domain",
     "ip",
+    "device",
+    "stage",
+    "reason",
+    "guid",
+    "name",
+    "tag",
+    "score",
+    "user_agent",
+    "language",
+    "sub_id_2",
+    "ip_api_proxy",
+    "ip_api_hosting",
+    "ip_api_blocked",
+    "ip_api_isp",
+    "ip_api_org",
+    "ip_api_as",
+    "ip_api_country_code",
+    "reverse_dns_ok",
+    "reverse_dns_blocked",
+    "reverse_dns_matched_word",
+    "reverse_dns_hostnames",
+    "keitaro_status",
+    "keitaro_url",
+    "checker_summary",
+    "checker_json",
+    "details"
+  ];
+
+  const defaultColumns = [
+    "__info",
+    "created_at",
+    "domain",
+    "ip",
+    "device",
     "stage",
     "reason",
     "guid",
@@ -519,6 +608,11 @@ async function renderRejectsTablePage(rows, options = {}) {
     "details"
   ];
 
+  const requestedColumns = Array.isArray(options.columns) ? options.columns : [];
+  const visibleColumns = (requestedColumns.length ? requestedColumns : defaultColumns)
+    .filter((column) => allColumns.includes(column));
+  if (!visibleColumns.includes("__info")) visibleColumns.unshift("__info");
+
   const headerHtml = visibleColumns
     .map((column) => `<th>${htmlEscape(column === "__info" ? "info" : column)}</th>`)
     .join("");
@@ -537,6 +631,7 @@ async function renderRejectsTablePage(rows, options = {}) {
 
   const selectedDomain = String(options.domain || "").trim().toLowerCase();
   const sortOrder = String(options.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+  const selectedDevice = String(options.device || "").trim().toLowerCase();
   const domains = Array.isArray(options.domains) ? options.domains : [];
   const domainOptions = [
     `<option value=""${selectedDomain ? "" : " selected"}>All domains</option>`,
@@ -549,9 +644,27 @@ async function renderRejectsTablePage(rows, options = {}) {
     })
   ].join("");
 
+  const deviceOptions = [
+    `<option value=""${selectedDevice ? "" : " selected"}>All devices</option>`,
+    ...["desktop", "mobile", "tablet", "bot", "unknown"].map((device) =>
+      `<option value="${device}"${selectedAttr(selectedDevice, device)}>${device}</option>`
+    )
+  ].join("");
+
+  const columnOptions = allColumns.map((column) => {
+    const selected = visibleColumns.includes(column) ? " selected" : "";
+    const label = column === "__info" ? "info" : column;
+    return `<option value="${htmlEscape(column)}"${selected}>${htmlEscape(label)}</option>`;
+  }).join("");
+
   const filterQuery = new URLSearchParams();
-  if (selectedDomain) filterQuery.set("domain", selectedDomain);
+  const queryFields = ["domain", "order", "ip", "hideIp", "userAgent", "hideUserAgent", "device", "hideDevice", "clientChecks", "hideClientChecks"];
+  for (const field of queryFields) {
+    const value = csvQueryValue(options[field]);
+    if (value) filterQuery.set(field, value);
+  }
   filterQuery.set("order", sortOrder);
+  for (const column of visibleColumns) filterQuery.append("columns", column);
   const filterSuffix = filterQuery.toString() ? `?${filterQuery.toString()}` : "";
 
   return replaceTemplateVars(template, {
@@ -560,13 +673,22 @@ async function renderRejectsTablePage(rows, options = {}) {
     LOGOUT_URL: htmlEscape(`${REJECTS_ADMIN_PATH}/logout`),
     FILTER_ACTION: htmlEscape(REJECTS_ADMIN_PATH),
     DOMAIN_OPTIONS: domainOptions,
+    DEVICE_OPTIONS: deviceOptions,
+    COLUMN_OPTIONS: columnOptions,
     ORDER_DESC_SELECTED: sortOrder === "desc" ? "selected" : "",
     ORDER_ASC_SELECTED: sortOrder === "asc" ? "selected" : "",
+    FILTER_IP: htmlEscape(options.ip || ""),
+    FILTER_HIDE_IP: htmlEscape(options.hideIp || ""),
+    FILTER_UA: htmlEscape(options.userAgent || ""),
+    FILTER_HIDE_UA: htmlEscape(options.hideUserAgent || ""),
+    FILTER_HIDE_DEVICE: htmlEscape(options.hideDevice || ""),
+    FILTER_CHECKS: htmlEscape(options.clientChecks || ""),
+    FILTER_HIDE_CHECKS: htmlEscape(options.hideClientChecks || ""),
     ROW_COUNT: String(rows.length),
     GENERATED_AT: htmlEscape(nowSql()),
     TABLE_HEADER: headerHtml,
     TABLE_ROWS: rowsHtml,
-    EMPTY_STATE: rows.length ? "" : `<div class="empty">No rejected users yet.</div>`,
+    EMPTY_STATE: rows.length ? "" : `<div class="empty">No rejected users found for current filters.</div>`,
     TABLE_DISPLAY: rows.length ? "" : "display:none;"
   });
 }
@@ -1019,13 +1141,29 @@ async function checkIpProxy(ip) {
 }
 
 
+function getRejectsAdminQueryOptions(query = {}) {
+  const columnsRaw = Array.isArray(query.columns) ? query.columns : (query.columns ? [query.columns] : []);
+  return {
+    domain: String(query.domain || "").trim(),
+    order: String(query.order || "desc").toLowerCase() === "asc" ? "asc" : "desc",
+    ip: String(query.ip || "").trim(),
+    hideIp: String(query.hideIp || "").trim(),
+    userAgent: String(query.userAgent || "").trim(),
+    hideUserAgent: String(query.hideUserAgent || "").trim(),
+    device: String(query.device || "").trim().toLowerCase(),
+    hideDevice: String(query.hideDevice || "").trim(),
+    clientChecks: String(query.clientChecks || "").trim(),
+    hideClientChecks: String(query.hideClientChecks || "").trim(),
+    columns: columnsRaw.map((column) => String(column || "").trim()).filter(Boolean)
+  };
+}
+
 app.get(REJECTS_ADMIN_PATH, requireRejectsAdmin, async (req, res) => {
   try {
-    const domain = String(req.query?.domain || "").trim();
-    const order = String(req.query?.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
-    const { rows, domains } = await readRejectRows({ domain, order, limit: 1000 });
+    const options = getRejectsAdminQueryOptions(req.query || {});
+    const { rows, domains } = await readRejectRows({ ...options, limit: 1000 });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.send(await renderRejectsTablePage(rows, { domain, order, domains }));
+    return res.send(await renderRejectsTablePage(rows, { ...options, domains }));
   } catch (err) {
     console.error("Rejects admin page failed:", err?.message || err);
     return res.status(500).send("Failed to read rejected users table");
@@ -1066,18 +1204,13 @@ app.get(`${REJECTS_ADMIN_PATH}/logout`, (req, res) => {
 
 app.get(`${REJECTS_ADMIN_PATH}/download`, requireRejectsAdmin, async (req, res) => {
   try {
-    const domain = String(req.query?.domain || "").trim();
-    const order = String(req.query?.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+    const options = getRejectsAdminQueryOptions(req.query || {});
 
-    if (!domain && order === "desc") {
-      await ensureRejectsTable();
-      return res.download(REJECTS_TABLE_FILE, "rejected_users.csv");
-    }
-
-    const { headers, rows } = await readRejectRows({ domain, order, limit: 1000000 });
+    const { headers, rows } = await readRejectRows({ ...options, limit: 1000000 });
+    const exportHeaders = headers.includes("device") ? headers : [...headers, "device"];
     const csv = [
-      headers.map(csvCell).join(","),
-      ...rows.map((row) => headers.map((header) => csvCell(row[header] || "")).join(","))
+      exportHeaders.map(csvCell).join(","),
+      ...rows.map((row) => exportHeaders.map((header) => csvCell(row[header] || "")).join(","))
     ].join("\n") + "\n";
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
