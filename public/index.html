@@ -1,32 +1,46 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>sagarkhalil.xyz — Leaderboard</title>
+  <title>jumpstats-scores.com — Leaderboard</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <div class="bg-orb bg-orb-one" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-two" aria-hidden="true"></div>
+
   <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="JumpStats Scores home">
+        <span class="brand-mark">JS</span>
+        <span>
+          <strong>JumpStats</strong>
+          <small>jumpstats-scores.com</small>
+        </span>
+      </a>
+      <a class="privacy-link" href="https://sites.google.com/view/jumpstats-scores" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+    </header>
+
     <main class="workspace">
       <section class="hero" aria-label="Leaderboard summary">
-        <div>
-          <p class="eyebrow">GLOBAL LEADERBOARD</p>
-          <h1>LEADERBOARD</h1>
-          <p class="hero-text" id="metaLine">Loading…</p>
+        <div class="hero-copy">
+          <p class="eyebrow">LIVE SCOREBOARD</p>
+          <h1>Jump Ball Leaderboard</h1>
+          <p class="hero-text" id="metaLine">Loading leaderboard data…</p>
         </div>
 
         <div class="stat-grid" aria-label="Leaderboard statistics">
           <div class="stat-card">
-            <span>Total players: </span>
+            <span>Total players</span>
             <strong id="totalPlayers">0</strong>
           </div>
           <div class="stat-card">
-            <span>Page: </span>
+            <span>Current page</span>
             <strong id="pageStat">1 / 1</strong>
           </div>
           <div class="stat-card">
-            <span>Per page: </span>
+            <span>Rows per page</span>
             <strong id="limitStat">10</strong>
           </div>
         </div>
@@ -35,16 +49,16 @@
       <section class="board-panel" aria-label="Leaderboard">
         <div class="board-toolbar">
           <div>
-            <h2>RANK TABLE</h2>
-            <p>Players are sorted by score from highest to lowest.</p>
+            <h2>Top Players</h2>
+            <p>Scores are sorted from highest to lowest.</p>
           </div>
 
           <div class="controls" aria-label="Pagination controls">
-            <button class="btn ghost" id="firstBtn" type="button">FIRST</button>
-            <button class="btn ghost" id="prevBtn" type="button">PREV</button>
+            <button class="btn ghost" id="firstBtn" type="button">First</button>
+            <button class="btn ghost" id="prevBtn" type="button">Prev</button>
             <div class="page-indicator" id="pageInfo">Page 1 / 1</div>
-            <button class="btn" id="nextBtn" type="button">NEXT</button>
-            <button class="btn" id="lastBtn" type="button">LAST</button>
+            <button class="btn" id="nextBtn" type="button">Next</button>
+            <button class="btn" id="lastBtn" type="button">Last</button>
           </div>
         </div>
 
@@ -116,9 +130,9 @@
     }
 
     function rankLabel(rank){
-      if (rank === 1) return "TOP_01";
-      if (rank === 2) return "TOP_02";
-      if (rank === 3) return "TOP_03";
+      if (rank === 1) return "1st";
+      if (rank === 2) return "2nd";
+      if (rank === 3) return "3rd";
       return `#${rank}`;
     }
 
@@ -135,11 +149,11 @@
     }
 
     function render(){
-      metaLine.textContent = `${formatScore(total)} players registered • ${PAGE_SIZE} rows per page`;
+      metaLine.textContent = `${formatScore(total)} players registered • updated in real time`;
       errorLine.textContent = "";
 
       if (!rows.length){
-        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">No data.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">No scores yet.</td></tr>`;
         setButtons();
         return;
       }
@@ -154,6 +168,7 @@
 
           <td class="col-user">
             <div class="user">
+              <div class="avatar">${safeText(String(u.name || "?").slice(0, 1).toUpperCase())}</div>
               <div>
                 <div class="uname">${safeText(u.name)}</div>
                 <div class="uid mono">${safeText(u.guid ?? "")}</div>

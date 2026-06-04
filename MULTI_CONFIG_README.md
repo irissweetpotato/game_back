@@ -16,12 +16,12 @@ For multiple applications/domains on one VDS, use one of these formats.
 API_KEY_1=api_key_for_first_app
 KEITARO_TRACKER_1=https://first-keitaro.example
 KEITARO_TOKEN_1=first_keitaro_token
-DOMAINS_1=domain-one.example,www.domain-one.example
+DOMAINS_1=jumpstats-scores.com,www.jumpstats-scores.com
 
 API_KEY_2=api_key_for_second_app
 KEITARO_TRACKER_2=https://second-keitaro.example
 KEITARO_TOKEN_2=second_keitaro_token
-DOMAINS_2=domain-two.example,www.domain-two.example
+DOMAINS_2=jumpstats-scores.com,www.jumpstats-scores.com
 ```
 
 Indexes may be any amount: `_1`, `_2`, `_3`, etc. The request is matched by `x-api-key`; the matching set supplies the Keitaro URL and token.
@@ -31,7 +31,7 @@ Indexes may be any amount: `_1`, `_2`, `_3`, etc. The request is matched by `x-a
 ## JSON option
 
 ```env
-API_CONFIGS=[{"api_key":"api_key_1","keitaro_url":"https://keitaro-1.example","keitaro_token":"token_1","domains":["domain-one.example"]},{"api_key":"api_key_2","keitaro_url":"https://keitaro-2.example","keitaro_token":"token_2"}]
+API_CONFIGS=[{"api_key":"api_key_1","keitaro_url":"https://keitaro-1.example","keitaro_token":"token_1","domains":["jumpstats-scores.com"]},{"api_key":"api_key_2","keitaro_url":"https://keitaro-2.example","keitaro_token":"token_2"}]
 ```
 
 ## Comma-separated option

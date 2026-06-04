@@ -1,4 +1,4 @@
-$base = "https://stats-games.com"
+$base = "https://jumpstats-scores.com"
 
 for ($i = 1; $i -le 100; $i++) {
     $guid = [guid]::NewGuid().ToString()
