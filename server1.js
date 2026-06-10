@@ -202,7 +202,7 @@ function parseClientCheckReport(body) {
       const name = String(item.name || "unknown").slice(0, 80);
       const suspicious = item.suspicious === true || String(item.suspicious).toLowerCase() === "true";
       const clientInstaLock = item.instaLock === true || String(item.instaLock).toLowerCase() === "true";
-      const effectiveInstaLock = clientCheckCanDisableInstaLock(name) ? clientInstaLock : true;
+      const effectiveInstaLock = clientCheckCanDisableInstaLock(name) ? false : clientInstaLock;
       return {
         name,
         suspicious,
