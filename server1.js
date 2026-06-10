@@ -220,9 +220,7 @@ function parseClientCheckReport(body) {
     else suspiciousCounter += 1;
   }
 
-  const suspiciousChecksNeeded = Number.isFinite(Number(source.suspiciousChecksNeeded))
-    ? Math.max(1, Number(source.suspiciousChecksNeeded))
-    : 3;
+  const suspiciousChecksNeeded = 3;
 
   const finalResult = instaLocked || suspiciousCounter >= suspiciousChecksNeeded;
   return {
