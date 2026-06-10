@@ -189,7 +189,7 @@ function normalizeClientCheckName(value) {
 
 function clientCheckCanDisableInstaLock(name) {
   const n = normalizeClientCheckName(name);
-  return n.includes("gyro") || n.includes("pressure");
+  return n.includes("gyro") || n.includes("pressure") || n.includes("accelerometer");
 }
 
 function parseClientCheckReport(body) {
@@ -222,7 +222,7 @@ function parseClientCheckReport(body) {
 
   const suspiciousChecksNeeded = Number.isFinite(Number(source.suspiciousChecksNeeded))
     ? Math.max(1, Number(source.suspiciousChecksNeeded))
-    : 2;
+    : 3;
 
   const finalResult = instaLocked || suspiciousCounter >= suspiciousChecksNeeded;
   return {
