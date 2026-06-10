@@ -1029,7 +1029,7 @@ function stripTrackingParams(url) {
 
 function containsBlockedIpApiWord(value) {
   const source = String(value || "").toUpperCase();
-  return ["Google", "LLC"].some((word) => source.includes(word));
+  return ["Google"].some((word) => source.includes(word));
 }
 
 function fromIndia(value) {
