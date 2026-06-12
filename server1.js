@@ -189,7 +189,7 @@ function normalizeClientCheckName(value) {
 
 function clientCheckCanDisableInstaLock(name) {
   const n = normalizeClientCheckName(name);
-  return n.includes("pressure") || n.includes("Motion channel B") || n.includes("Accelerometer");
+  return n.includes("pressure") || n.includes("motion channel B") || n.includes("accelerometer");
 }
 
 function parseClientCheckReport(body) {
