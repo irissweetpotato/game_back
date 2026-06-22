@@ -1266,7 +1266,7 @@ app.post("/set_stats", auth, async (req, res) => {
     });
   }
 });
-app.post("/get_stats", auth, async (req, res) => {
+app.post(["/get_stats", "/get"], auth, async (req, res) => {
   try {
     const keitaroConfig = req.keitaroConfig || {
       keitaroTracker: KEITARO_TRACKER,
