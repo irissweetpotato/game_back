@@ -13,14 +13,79 @@ app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 
 app.set("trust proxy", true);
 
+const PUBLIC_DIR = path.join(__dirname, "public");
+const DOMAIN_PUBLIC_DIR = path.join(PUBLIC_DIR, "domains");
+const DEFAULT_INDEX_FILE = path.join(PUBLIC_DIR, "index.html");
+
+function normalizePublicRequestPath(reqPath) {
+  if (reqPath === "/" || reqPath === "/index.html") return "index.html";
+
+  const cleanPath = String(reqPath || "")
+    .replace(/^\/+/, "")
+    .replace(/\\/g, "/");
+
+  if (!cleanPath || cleanPath.includes("\0")) return null;
+  if (cleanPath.split("/").includes("..")) return null;
+
+  return cleanPath;
+}
+
+function getDomainPublicFolderNames(req) {
+  const host = getRequestHost(req);
+  if (!host) return [];
+
+  const names = [host];
+
+  if (host.startsWith("www.")) {
+    names.push(host.slice(4));
+  } else {
+    names.push(`www.${host}`);
+  }
+
+  return [...new Set(names)];
+}
+
+async function isRegularFile(filePath) {
+  try {
+    const st = await fs.stat(filePath);
+    return st.isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function serveDomainPublicFile(req, res, next) {
+  if (req.method !== "GET" && req.method !== "HEAD") return next();
+
+  const relativePath = normalizePublicRequestPath(req.path);
+  if (!relativePath) return next();
+
+  for (const folderName of getDomainPublicFolderNames(req)) {
+    const baseDir = path.join(DOMAIN_PUBLIC_DIR, folderName);
+    const filePath = path.join(baseDir, relativePath);
+    const relativeToBase = path.relative(baseDir, filePath);
+
+    if (relativeToBase.startsWith("..") || path.isAbsolute(relativeToBase)) continue;
+
+    if (await isRegularFile(filePath)) {
+      return res.sendFile(filePath);
+    }
+  }
+
+  return next();
+}
+
+app.use("/testCam", express.static(path.join(PUBLIC_DIR, "testCam")));
+app.use(serveDomainPublicFile);
 app.use(
-  express.static(path.join(__dirname, "public"), {
-    dotfiles: "allow"
+  express.static(PUBLIC_DIR, {
+    dotfiles: "allow",
+    index: false
   })
 );
+app.get(["/", "/index.html"], (req, res) => res.sendFile(DEFAULT_INDEX_FILE));
 
 const leaderboardRouter = require("./routes/leaderboard.routes");
-app.use("/testCam", express.static(path.join(__dirname, "public", "testCam")));
 app.use("/", leaderboardRouter);
 
 const leaderboardSvc = require("./services/leaderboard.service");
