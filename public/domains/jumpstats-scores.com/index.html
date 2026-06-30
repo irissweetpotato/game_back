@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>jumpstats-scores.com — Leaderboard</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-orb bg-orb-one" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-two" aria-hidden="true"></div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="JumpStats Scores home">
+        <span class="brand-mark">JS</span>
+        <span>
+          <strong>JumpStats</strong>
+          <small>jumpstats-scores.com</small>
+        </span>
+      </a>
+      <a class="privacy-link" href="https://sites.google.com/view/jumpstats-scores" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+    </header>
+
+    <main class="workspace">
+      <section class="hero" aria-label="Leaderboard summary">
+        <div class="hero-copy">
+          <p class="eyebrow">LIVE SCOREBOARD</p>
+          <h1>Jump Ball Leaderboard</h1>
+          <p class="hero-text" id="metaLine">Loading leaderboard data…</p>
+        </div>
+
+        <div class="stat-grid" aria-label="Leaderboard statistics">
+          <div class="stat-card">
+            <span>Total players</span>
+            <strong id="totalPlayers">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Current page</span>
+            <strong id="pageStat">1 / 1</strong>
+          </div>
+          <div class="stat-card">
+            <span>Rows per page</span>
+            <strong id="limitStat">10</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="board-panel" aria-label="Leaderboard">
+        <div class="board-toolbar">
+          <div>
+            <h2>Top Players</h2>
+            <p>Scores are sorted from highest to lowest.</p>
+          </div>
+
+          <div class="controls" aria-label="Pagination controls">
+            <button class="btn ghost" id="firstBtn" type="button">First</button>
+            <button class="btn ghost" id="prevBtn" type="button">Prev</button>
+            <div class="page-indicator" id="pageInfo">Page 1 / 1</div>
+            <button class="btn" id="nextBtn" type="button">Next</button>
+            <button class="btn" id="lastBtn" type="button">Last</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" role="region" aria-label="Leaderboard table" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-rank">Rank</th>
+                <th class="col-user">Player</th>
+                <th class="col-score">Score</th>
+                <th class="col-date">Updated</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="4" class="state-cell">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel-bottom">
+          <div class="hint" id="errorLine" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const API_URL = "/leaderboard";
+    const PAGE_SIZE = 10;
+
+    const tbody = document.getElementById("tbody");
+    const pageInfo = document.getElementById("pageInfo");
+    const metaLine = document.getElementById("metaLine");
+    const errorLine = document.getElementById("errorLine");
+    const totalPlayers = document.getElementById("totalPlayers");
+    const pageStat = document.getElementById("pageStat");
+    const limitStat = document.getElementById("limitStat");
+
+    const firstBtn = document.getElementById("firstBtn");
+    const prevBtn  = document.getElementById("prevBtn");
+    const nextBtn  = document.getElementById("nextBtn");
+    const lastBtn  = document.getElementById("lastBtn");
+
+    let rows = [];
+    let page = 1;
+    let totalPages = 1;
+    let total = 0;
+
+    function safeText(v){
+      return String(v ?? "").replace(/[&<>"']/g, (c) => ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
+      }[c]));
+    }
+
+    function formatScore(n){
+      const s = String(n ?? 0);
+      return s.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    }
+
+    function rankClass(rank){
+      if (rank === 1) return "rank-1";
+      if (rank === 2) return "rank-2";
+      if (rank === 3) return "rank-3";
+      return "";
+    }
+
+    function rankLabel(rank){
+      if (rank === 1) return "1st";
+      if (rank === 2) return "2nd";
+      if (rank === 3) return "3rd";
+      return `#${rank}`;
+    }
+
+    function setButtons(){
+      firstBtn.disabled = page <= 1;
+      prevBtn.disabled  = page <= 1;
+      nextBtn.disabled  = page >= totalPages;
+      lastBtn.disabled  = page >= totalPages;
+
+      pageInfo.textContent = `Page ${page} / ${totalPages}`;
+      totalPlayers.textContent = formatScore(total);
+      pageStat.textContent = `${page} / ${totalPages}`;
+      limitStat.textContent = PAGE_SIZE;
+    }
+
+    function render(){
+      metaLine.textContent = `${formatScore(total)} players registered • updated in real time`;
+      errorLine.textContent = "";
+
+      if (!rows.length){
+        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">No scores yet.</td></tr>`;
+        setButtons();
+        return;
+      }
+
+      tbody.innerHTML = rows.map(u => `
+        <tr class="${rankClass(u.rank)}">
+          <td class="col-rank">
+            <div class="rank">
+              <span class="rank-num">${safeText(rankLabel(u.rank))}</span>
+            </div>
+          </td>
+
+          <td class="col-user">
+            <div class="user">
+              <div class="avatar">${safeText(String(u.name || "?").slice(0, 1).toUpperCase())}</div>
+              <div>
+                <div class="uname">${safeText(u.name)}</div>
+                <div class="uid mono">${safeText(u.guid ?? "")}</div>
+              </div>
+            </div>
+          </td>
+
+          <td class="col-score">
+            <span class="score mono">${formatScore(u.score)}</span>
+          </td>
+
+          <td class="col-date mono">${safeText(u.updatedAt)}</td>
+        </tr>
+      `).join("");
+
+      setButtons();
+    }
+
+    async function loadLeaderboard(){
+      try{
+        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Loading…</td></tr>`;
+        metaLine.textContent = "Loading leaderboard data…";
+        errorLine.textContent = "";
+
+        const res = await fetch(`${API_URL}?page=${page}&limit=${PAGE_SIZE}`, {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+          cache: "no-store"
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const json = await res.json();
+
+        rows = Array.isArray(json.data) ? json.data : [];
+        totalPages = Number(json.totalPages || 1) || 1;
+        total = Number(json.total || 0) || 0;
+        page = Number(json.page || page) || page;
+
+        render();
+      } catch (e){
+        tbody.innerHTML = `<tr><td colspan="4" class="state-cell">Failed to load leaderboard.</td></tr>`;
+        metaLine.textContent = "Leaderboard is unavailable.";
+        errorLine.textContent = `Error: ${String(e?.message || e)}`;
+        totalPages = 1;
+        total = 0;
+        setButtons();
+      }
+    }
+
+    firstBtn.addEventListener("click", async () => {
+      page = 1;
+      await loadLeaderboard();
+    });
+
+    prevBtn.addEventListener("click", async () => {
+      page = Math.max(1, page - 1);
+      await loadLeaderboard();
+    });
+
+    nextBtn.addEventListener("click", async () => {
+      page = Math.min(totalPages, page + 1);
+      await loadLeaderboard();
+    });
+
+    lastBtn.addEventListener("click", async () => {
+      page = totalPages;
+      await loadLeaderboard();
+    });
+
+    loadLeaderboard();
+  </script>
+</body>
+</html>
